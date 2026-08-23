@@ -18,6 +18,7 @@ function makeEntry(name, team, perf, col, num, opts) {
     tyre: 100, fuel: 100, dur: 9999, maxdur: 9999,
     pit: 0, stops: 0, pitMul: 1, fuelMul: 1, draftMul: 1, brake: 0,
     done: false, dnf: false, fin: 0, stagePts: 0, ledLaps: 0, best: 0,
+    pace: 0, defend: 0, sbs: 0,
   }, opts || {});
 }
 
@@ -71,11 +72,12 @@ function startRace(track, season, auraTier) {
   const grid = field.slice().sort((a, b) => a.qt - b.qt);
   grid.forEach((c, i) => {
     c.grid = i;
-    c.lane = (i % 2) ? 0.62 : 0.30;          // inside / outside rows
+    c.lane = (i % 2) ? 0.68 : 0.28;          // inside / outside rows
     c.laneT = c.lane;
-    c.s = tk.sfDist - 26 - i * 13;           // stack them behind the line
+    c.s = tk.sfDist - 26 - Math.floor(i / 2) * 15;   // two-by-two, as they roll off
     c.lap = 0;
   });
+  if (typeof resetRaceView === "function") resetRaceView();
   const pQual = grid.findIndex(c => c.isP) + 1;
 
   R = {
@@ -91,6 +93,59 @@ function startRace(track, season, auraTier) {
   return R;
 }
 function banner(text, secs) { if (R) { R.msg = text; R.msgT = secs; } }
+
+/* How many lanes a surface supports, and where the groove sits. */
+function raceLanes(surf) {
+  if (surf === "ss")   return { lo: 0.10, hi: 0.90, line: 0.34 };   // three wide
+  if (surf === "mid")  return { lo: 0.14, hi: 0.86, line: 0.34 };
+  if (surf === "road") return { lo: 0.18, hi: 0.82, line: 0.40 };
+  if (surf === "dirt") return { lo: 0.14, hi: 0.86, line: 0.44 };
+  return { lo: 0.20, hi: 0.80, line: 0.32 };                        // short track, two wide
+}
+/* signed gap to another car along the lap, in world units */
+function gapTo(a, b, tk) {
+  let g = (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s);
+  return g;
+}
+function carAhead(c, tk) {
+  let best = null;
+  for (const o of R.field) {
+    if (o === c || o.done || o.dnf || o.pit > 0) continue;
+    const g = gapTo(c, o, tk);
+    if (g > 0 && g < 30 && Math.abs(o.lane - c.lane) < 0.22 && (!best || g < best.gap))
+      best = { car: o, gap: g };
+  }
+  return best;
+}
+function carBehind(c, tk) {
+  let best = null;
+  for (const o of R.field) {
+    if (o === c || o.done || o.dnf || o.pit > 0) continue;
+    const g = -gapTo(c, o, tk);
+    if (g > 0 && g < 22 && Math.abs(o.lane - c.lane) < 0.26 && (!best || g < best.gap))
+      best = { car: o, gap: g };
+  }
+  return best;
+}
+/* a car overlapping us door-to-door */
+function alongside(c, tk) {
+  for (const o of R.field) {
+    if (o === c || o.done || o.dnf || o.pit > 0) continue;
+    const g = Math.abs(gapTo(c, o, tk));
+    if (g < 7 && Math.abs(o.lane - c.lane) < 0.30) return o;
+  }
+  return null;
+}
+/* is a lane clear enough to move into? */
+function laneFree(c, lane, tk) {
+  if (lane <= 0.02 || lane >= 0.98) return false;
+  for (const o of R.field) {
+    if (o === c || o.done || o.dnf || o.pit > 0) continue;
+    const g = gapTo(c, o, tk);
+    if (g > -8 && g < 16 && Math.abs(o.lane - lane) < 0.20) return false;
+  }
+  return true;
+}
 
 /* ---------- per-tick simulation ---------- */
 function raceTick(dt) {
@@ -153,11 +208,47 @@ function raceTick(dt) {
     const accel = 8 + c.perf * 0.05;
     c.v += clamp(target - c.v, -accel * dt * 2.4, accel * dt);
 
-    /* choose a racing line: inside on corner entry, wander a little */
-    const wantLane = R.yellow ? 0.5 : (curv > 0.2 ? 0.34 : (c.lane));
-    c.lane += clamp(wantLane - c.lane, -0.5 * dt, 0.5 * dt);
+    /* ---- racecraft: pick a lane, defend, and pass ---- */
+    const lanes = raceLanes(track.surf);
+    let want = c.lane;
+    if (R.yellow) {
+      want = 0.42;                                   // single file behind the pace car
+    } else {
+      const ahead = carAhead(c, tk);
+      if (ahead && ahead.gap < 26 && c.pace > ahead.car.pace * 1.004) {
+        /* faster than the car in front — look for a way by */
+        const out = clamp(c.lane + 0.30, lanes.lo, lanes.hi);
+        const ins = clamp(c.lane - 0.30, lanes.lo, lanes.hi);
+        const outFree = laneFree(c, out, tk), insFree = laneFree(c, ins, tk);
+        /* momentum outside on the big tracks, dive inside on the short ones */
+        const preferOut = track.surf === "ss" || track.surf === "mid";
+        want = preferOut ? (outFree ? out : (insFree ? ins : c.lane))
+                         : (insFree ? ins : (outFree ? out : c.lane));
+        if (!outFree && !insFree) target *= 0.985;    // stuck in traffic
+      } else if (ahead && ahead.gap < 9) {
+        target *= 0.99;                               // dirty air right behind
+      } else {
+        /* no traffic: settle back onto the groove */
+        want = c.defend > 0 ? c.lane : lanes.line;
+      }
+      /* a leader defends the preferred line when someone is close behind */
+      const beh = carBehind(c, tk);
+      c.defend = (beh && beh.gap < 12 && beh.car.pace > c.pace) ? 1 : 0;
+      if (c.defend) want = lanes.line;
+    }
+    /* never steer into a car alongside */
+    const side = alongside(c, tk);
+    if (side) {
+      if (want > c.lane && side.lane > c.lane) want = c.lane;
+      if (want < c.lane && side.lane < c.lane) want = c.lane;
+      target *= 0.992;                                // side-by-side scrubs speed
+      c.sbs = 1;
+    } else c.sbs = 0;
+    const rate = (track.surf === "road" ? 0.75 : 0.55) * dt;
+    c.lane += clamp(want - c.lane, -rate, rate);
+    c.lane = clamp(c.lane, lanes.lo, lanes.hi);
+    c.pace = target;
 
-    const before = c.s;
     c.s += c.v * dt;
 
     /* lap crossing */

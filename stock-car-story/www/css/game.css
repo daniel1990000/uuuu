@@ -43,8 +43,12 @@ canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
 #raceHud .hb{background:rgba(10,17,48,.92);border:2px solid #000;border-radius:6px;color:#fff;
   padding:5px 6px;box-shadow:inset 0 0 0 1px #3c50b0}
 #posBadge{font-size:13px;color:var(--gold)}
-#lapBox{font-size:8px;color:#9fe8ff;line-height:1.5}
-#lapBox .hs{color:#ffd8a0}
+#lapBox{font-size:8px;color:#9fe8ff;line-height:1.5;min-width:64px}
+.hb2{display:flex;align-items:center;gap:3px;margin-top:2px}
+.hb2 span{font-size:6px;color:#ffd8a0;width:6px}
+.hb2 i{display:block;height:4px;background:linear-gradient(#8ef08a,var(--green));
+  border:1px solid #000;border-radius:2px;min-width:2px}
+.hb2.f i{background:linear-gradient(#ffe98a,#f5a623)}
 #spdBox{font-size:11px;color:var(--gold);min-width:76px;text-align:right}
 #auraBtn{pointer-events:auto;margin-left:auto;background:linear-gradient(#ffe98a,#ffb52e);
   border:3px solid #000;border-radius:11px;color:#4a2400;font-family:inherit;font-size:10px;
@@ -70,7 +74,13 @@ h4{font-size:9px;color:#5a6478;margin:9px 0 4px;border-bottom:2px solid var(--li
 .row{display:flex;align-items:center;gap:6px;padding:6px 3px;border-bottom:1px solid #e4e9f2}
 .row:active{background:#eef3ff}
 .mg{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.mg .pill{text-align:center;padding:14px 4px}
+.mg .pill{text-align:center;padding:12px 4px}
+.pill.mi{display:flex;align-items:center;gap:7px;justify-content:flex-start;padding-left:10px;position:relative}
+.pill.mi .ico{font-size:13px;line-height:1;filter:saturate(1.1)}
+.pill.mi .dot{position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;
+  background:var(--red);border:1px solid #000;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.pill.mi .dot{animation:none}}
 .chip{display:inline-block;border:2px solid #000;border-radius:6px;padding:1px 4px;font-size:7px;
   background:#e8eefc;color:#1e3358;vertical-align:middle}
 .chip.gold{background:var(--gold)} .chip.lv{background:#dff0dd;color:#1a5c28}

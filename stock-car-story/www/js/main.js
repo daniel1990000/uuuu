@@ -50,7 +50,8 @@ function updateRaceHud() {
   const pos = playerPos();
   $("posBadge").textContent = "P" + pos;
   $("lapBox").innerHTML = "LAP " + Math.min(me.lap + 1, R.laps) + "/" + R.laps +
-    "<br><span class='hs'>T" + Math.round(me.tyre) + " F" + Math.round(me.fuel) + "</span>";
+    "<div class='hb2'><span>T</span><i style='width:" + Math.round(me.tyre) + "%'></i></div>" +
+    "<div class='hb2 f'><span>F</span><i style='width:" + Math.round(me.fuel) + "%'></i></div>";
   $("spdBox").textContent = Math.round(me.v * MPH) + " mph";
   const btn = $("auraBtn");
   if (R.auraTier && R.auraLeft > 0) {

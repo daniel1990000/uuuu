@@ -107,10 +107,20 @@ function auraPicker(cb, verb) {
    ============================================================ */
 function openMenu() {
   sfx("click");
-  const items = [["Team", "scrTeam"], ["Machines", "scrCars"], ["Training", "scrTrain"],
-    ["Research", "scrResearch"], ["Parts", "scrParts"], ["Sponsors", "scrSponsors"],
-    ["Enter Race", "scrRaces"], ["Standings", "scrRecords"], ["Auras", "scrAuras"], ["Options", "scrOptions"]];
-  dlg("Menu", "<div class='mg'>" + items.map(([l, f]) => "<button class='pill' onclick='" + f + "()'>" + l + "</button>").join("") + "</div>",
+  const items = [
+    ["Team", "scrTeam", "👥"], ["Machines", "scrCars", "🏎"], ["Training", "scrTrain", "🏋"],
+    ["Research", "scrResearch", "🔬"], ["Parts", "scrParts", "🔧"], ["Sponsors", "scrSponsors", "📣"],
+    ["Enter Race", "scrRaces", "🏁"], ["Standings", "scrRecords", "🏆"],
+    ["Auras", "scrAuras", "✨"], ["Options", "scrOptions", "⚙"]];
+  const badge = (f) => {
+    if (f === "scrRaces" && !SEASON) return "";
+    if (f === "scrSponsors" && G.offers.length && G.sponsors.length < 2) return "<i class='dot'></i>";
+    if (f === "scrResearch" && (availableCarBlueprints().length || availablePartBlueprints().length)) return "<i class='dot'></i>";
+    if (f === "scrAuras" && anyAura()) return "<i class='dot'></i>";
+    return "";
+  };
+  dlg("Menu", "<div class='mg'>" + items.map(([l, f, ic]) =>
+    "<button class='pill mi' onclick='" + f + "()'><span class='ico'>" + ic + "</span>" + l + badge(f) + "</button>").join("") + "</div>",
     [["Close", closeDlg]]);
 }
 
