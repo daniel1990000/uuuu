@@ -156,7 +156,33 @@ without feeling unfair.
 
 ---
 
-## Part 3 — Presentation
+## Part 3 — The art pipeline
+
+All art is authored, not generated from primitives. Two kinds live in
+`sprites.js`:
+
+**Flat sprites** are pixel maps — one character per pixel, with a palette
+substitution table so a single authored sprite becomes a whole crowd. The
+spectators (six poses: standing, capped, cheering, flag-waving), the staff
+(three roles × four facings × two walk frames, with cap/helmet overlays),
+and the props (tyre, cone, drum, toolbox, pine, palm, trophy) are all drawn
+this way.
+
+**Voxel sprites** solve the problem that a car on an oval faces every
+direction. Each car body is authored once as a top-down pixel map where
+every character also carries a *height* — sill, body panel, chrome stripe,
+number panel, hood, roof, windscreen, rear window, spoiler blade and post,
+tyre, grille, headlight, tail light, cab pillar, helmet. At boot each model
+is baked into 32 rotation frames by drawing every cell as a small vertical
+column, far columns first so nearer ones occlude them, then running an
+outline pass so the silhouette reads at small sizes. Four body styles ship
+— stock saloon, aero coupe, race truck, dirt modified — and each of the 15
+chassis maps to one, so machines look different as you develop them.
+
+Baking costs about 40 ms at boot and buys correct rotation with consistent
+lighting, which hand-drawing 32 frames per body per livery could not.
+
+## Part 4 — Presentation
 
 Chunky pixel art at low internal resolution (roughly 130×250 logical pixels),
 scaled up with `image-rendering: pixelated`, so every shape lands on a fat
@@ -175,7 +201,7 @@ auto-rotates and picks its vertical squash to fill a portrait screen.
 
 ---
 
-## Part 4 — Technical
+## Part 5 — Technical
 
 ```
 www/
@@ -183,6 +209,7 @@ www/
   css/game.css          all styling
   js/data.js            every content table
   js/track.js           geometry engine + closure solver
+  js/sprites.js         hand-authored pixel art + the voxel car baker
   js/state.js           economy, time, library, sponsors, auras, save/load
   js/race.js            race simulation + championships
   js/render.js          all pixel art
@@ -204,7 +231,7 @@ See `RELEASE.md` for build and store submission, `STORE.md` for listing copy.
 
 ---
 
-## Part 5 — What I would build next
+## Part 6 — What I would build next
 
 In the order that would most improve the game:
 

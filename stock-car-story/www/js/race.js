@@ -14,6 +14,7 @@ const MPH = 2.35;      // world-units/sec → displayed mph
 function makeEntry(name, team, perf, col, num, opts) {
   return Object.assign({
     name, team, perf, col, num,
+    paintIdx: Math.max(0, TEAMC.indexOf(col)), model: "stock",
     isP: false, s: 0, lap: 0, v: 0, grid: 0, lane: 0, laneT: 0,
     tyre: 100, fuel: 100, dur: 9999, maxdur: 9999,
     pit: 0, stops: 0, pitMul: 1, fuelMul: 1, draftMul: 1, brake: 0,
@@ -27,8 +28,9 @@ function buildField(track, season) {
   const car = G.cars[t.car], drv = G.drivers[t.driver];
   const cs = carStats(car);
   const perf = carPerf(car, track.surf) + driverPerf(drv, track.surf);
-  const field = [makeEntry(drv.name, "YOUR TEAM", perf, "#e8332a", car.num, {
+  const field = [makeEntry(drv.name, "YOUR TEAM", perf, TEAMC[car.paint % 8], car.num, {
     isP: true, dur: car.dur, maxdur: cs.maxdur,
+    paintIdx: car.paint % 8, model: CHASSIS_MODEL[car.id] || "stock",
     pitMul: Math.max(0.45, 1 - cs.pit / 100 - shopTech() / 900),
     fuelMul: 1 + cs.fuel / 100, draftMul: 1 + cs.drv / 200,
     brake: cs.brake, anl: teamAnalysis(G.curTeam), adRate: cs.ad + teamAppeal(G.curTeam) * 0.4,
@@ -56,8 +58,11 @@ function buildField(track, season) {
       do { num = ri(2, 99); } while (nums.includes(num));
     }
     nums.push(num);
-    field.push(makeEntry(name, team, str, cols[i % cols.length], num,
-      { pitMul: rnd(0.85, 1.15), fuelMul: rnd(0.95, 1.1), draftMul: rnd(0.95, 1.08) }));
+    const rc = cols[i % cols.length];
+    field.push(makeEntry(name, team, str, rc, num,
+      { pitMul: rnd(0.85, 1.15), fuelMul: rnd(0.95, 1.1), draftMul: rnd(0.95, 1.08),
+        paintIdx: Math.max(0, TEAMC.indexOf(rc)),
+        model: ["stock", "stock", "aero", "stock", "truck", "mod"][i % 6] }));
   }
   return field;
 }

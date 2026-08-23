@@ -57,53 +57,7 @@ const TEAMC = ["#e8332a", "#2255cc", "#e9a11b", "#3fae4a", "#8a3fc2", "#12b0b0",
    PEOPLE
    ============================================================ */
 /* A packed spectator, 5×10.  `wave` lifts the arms. */
-function spectator(x, y, seed, wave) {
-  x = Math.round(x); y = Math.round(y);
-  const sk = SKIN[seed % 4], hr = HAIR[(seed * 3) % 8], sh = SHIRT[(seed * 7) % 12];
-  const kind = seed % 7;
-  px(x, y + 9, 5, 1, "rgba(0,0,0,.16)");
-  px(x, y + 4, 5, 5, sh);                                  // torso
-  px(x, y + 7, 5, 1, shade(sh, -0.28));                    // shading
-  if (wave) { px(x - 1, y + 1, 1, 4, sk); px(x + 5, y + 1, 1, 4, sk); }
-  else { px(x - 1, y + 5, 1, 3, sk); px(x + 5, y + 5, 1, 3, sk); }
-  px(x, y, 5, 5, sk);                                      // head
-  px(x, y + 4, 5, 1, shade(sk, -0.22));
-  if (kind === 0) { px(x - 1, y - 2, 7, 2, "#e8332a"); px(x - 1, y - 1, 7, 1, "#a3160f"); }   // cap
-  else if (kind === 1) { px(x - 1, y - 2, 7, 2, "#2255cc"); px(x - 1, y - 1, 7, 1, "#173a8c"); }
-  else { px(x - 1, y - 1, 7, 3, hr); px(x - 1, y + 1, 1, 2, hr); px(x + 5, y + 1, 1, 2, hr); }
-  px(x + 1, y + 2, 1, 1, "#20232c"); px(x + 3, y + 2, 1, 1, "#20232c");
-  if (kind === 3 && wave) {                                 // waving a flag
-    px(x + 6, y - 3, 1, 6, "#8a6a3c");
-    px(x + 7, y - 3, 4, 3, seed % 2 ? "#ffd23f" : "#e8332a");
-  }
-}
 /* Chibi staff: big head, tiny body, four facings, two walk frames */
-function chibi(x, y, seed, kind, face, step) {
-  x = Math.round(x); y = Math.round(y);
-  const sk = SKIN[seed % 4], hr = HAIR[(seed * 3) % 8];
-  const shirt = kind === "driver" ? "#e8332a" : kind === "crew" ? "#2a55c8" : "#efefef";
-  const dark = kind === "driver" ? "#a3160f" : kind === "crew" ? "#173a8c" : "#c8cdd8";
-  px(x, y + 13, 8, 2, "rgba(0,0,0,.22)");
-  const sw = step ? 1 : 0;
-  px(x + 1 + sw, y + 10, 2, 3, "#2b3442");
-  px(x + 4 - sw, y + 10, 2, 3, "#2b3442");
-  px(x + 1, y + 6, 6, 5, shirt);
-  px(x + 1, y + 9, 6, 1, dark);
-  px(x, y + 6, 1, 4, sk); px(x + 7, y + 6, 1, 4, sk);
-  px(x, y, 8, 7, sk);
-  px(x - 1, y - 1, 10, 3, hr);
-  px(x - 1, y + 1, 1, 3, hr); px(x + 8, y + 1, 1, 3, hr);
-  if (face === "up") { px(x - 1, y - 1, 10, 5, hr); }
-  else {
-    const ex = face === "left" ? -1 : face === "right" ? 1 : 0;
-    px(x + 2 + ex, y + 3, 1, 2, "#20232c");
-    px(x + 5 + ex, y + 3, 1, 2, "#20232c");
-    px(x + 3 + ex, y + 5, 2, 1, "#c98a7a");
-  }
-  if (kind === "crew") { px(x - 1, y - 2, 10, 2, "#2a55c8"); px(x - 1, y, 10, 1, "#173a8c"); }
-  if (kind === "driver") { px(x - 1, y - 2, 10, 4, "#f4f4f4"); px(x, y, 8, 2, "#7fd0ff"); px(x - 1, y + 1, 10, 1, "#c8ccd4"); }
-  if (kind === "marshal") { px(x - 1, y - 2, 10, 3, "#ffd23f"); }
-}
 
 /* ============================================================
    3D helpers — everything on the ground plane can be extruded
@@ -134,17 +88,6 @@ function boxCorners(p, off, L, W) {
 /* ============================================================
    THE STOCK CAR — a real extruded body with a driver in it
    ============================================================ */
-/* Screen-space fallback used by the title screen and the shop, where
-   there is no track sample to work from. */
-function stockCar(sx, sy, ang, col, num, L) {
-  const W = L * 0.50, H = L * 0.30;
-  const cs = Math.cos(ang), sn = Math.sin(ang);
-  const hl = L / 2, hw = W / 2;
-  /* rotate in the ground plane, then squash the vertical axis */
-  const pt = (fx, fy) => ({ x: sx + (fx * cs - fy * sn), y: sy + (fx * sn + fy * cs) * SQ_F });
-  const cor = [pt(hl, -hw), pt(hl, hw), pt(-hl, hw), pt(-hl, -hw)];
-  paintCar(cor, H, col, num, L);
-}
 const SQ_F = 0.58;
 
 /* The real one: takes the four projected ground corners.
@@ -244,30 +187,6 @@ function shade(hex, amt) {
 function carColor(car) { return TEAMC[car.paint % 8]; }
 
 /* ---------- scenery ---------- */
-function tree(x, y, s, kind) {
-  s = s || 1; x = Math.round(x); y = Math.round(y);
-  px(x - 1, y + 1, 6 * s, 2, "rgba(0,0,0,.18)");
-  if (kind === "palm") {
-    px(x + s, y - 6 * s, 2 * s, 7 * s, "#8a6a3c");
-    for (let i = -2; i <= 2; i++)
-      px(x - 4 * s + (i + 2) * 2.2 * s, y - 8 * s + Math.abs(i) * 1.5 * s, 3 * s, 2 * s, i % 2 ? "#2f8f3a" : "#3fae4a");
-    px(x - s, y - 9 * s, 6 * s, 2 * s, "#3fae4a");
-  } else {
-    px(x + s, y - 2 * s, 2 * s, 4 * s, "#6d4520");
-    px(x - 2 * s, y - 8 * s, 8 * s, 7 * s, "#2f8f3a");
-    px(x - s, y - 10 * s, 6 * s, 4 * s, "#3fae4a");
-    px(x + s, y - 9 * s, 2 * s, 2 * s, "#6ddf74");
-  }
-}
-function tyreStack(x, y, n) {
-  n = n || 3;
-  px(x - 1, y + 1, 11, 2, "rgba(0,0,0,.18)");
-  for (let i = 0; i < n; i++) {
-    px(x, y - i * 3, 9, 3, i % 2 ? "#23232a" : "#1b1b1f");
-    px(x + 1, y - i * 3, 3, 1, "#4a4a54");
-  }
-  px(x, y - n * 3, 9, 2, "#e8332a");
-}
 
 /* ============================================================
    TITLE
@@ -294,10 +213,10 @@ function drawTitle() {
   px(0, hz + 26, CW, 2, "#e8ecf2");
   for (let i = 0; i < CW; i += 18) px(i, hz + 14, 9, 2, "#e8ecf2");
   const t = frame * 0.9;
-  const cars = [[0, 34, "#e8332a", 1], [-30, 27, "#2255cc", 24], [-56, 40, "#e9a11b", 7], [-84, 30, "#3fae4a", 12]];
-  for (const [ox, oy, col, num] of cars) {
+  const cars = [[0, 34, 0, "stock"], [-30, 27, 1, "aero"], [-56, 40, 2, "stock"], [-84, 30, 3, "truck"]];
+  for (const [ox, oy, ci, mdl] of cars) {
     const x = ((t + ox + 400) % (CW + 130)) - 60;
-    stockCar(x, hz + oy, 0, col, num, 30);
+    drawCarSprite(x, hz + oy, 0, ci, mdl, 32);
   }
   const ty = Math.round(CH * 0.20);
   txtO("STOCK CAR", CW / 2, ty, "#ffd23f", Math.round(CW / 9), "center");
@@ -445,7 +364,9 @@ function drawGarage() {
     const p = at(3.0, 3.0);
     /* the lift pad, then the machine sitting on it */
     isoBox(3.0, 3.0, 1.15, 1.15, 4, "#b8bfc8", "#8f97a1", "#a2aab4");
-    stockCar(p.x, p.y - 8, -0.49, carColor(car), car.num, Math.max(30, TW * 2.6));
+    const sz = Math.max(30, TW * 2.6);
+    drawCarSprite(p.x, p.y - 8, -0.62, car.paint % 8, CHASSIS_MODEL[car.id] || "stock", sz);
+    txtO("#" + car.num + " " + esc(car.name), p.x, p.y + 20, "#ffffff", 7, "center");
   } });
 
   const staff = syncWalkers();
@@ -559,6 +480,17 @@ function W2Sang(h) {
 const onScreen = (p, m) => p.x > -(m || 40) && p.x < CW + (m || 40) && p.y > -(m || 40) && p.y < CH + (m || 40);
 function laneOffset(lane) { return (0.5 - lane) * 2 * VIEW.HALF * 0.74; }
 
+/* ---- authored-sprite wrappers ---- */
+function spectator(x, y, seed, wave) { drawSpectator(x - 1, y, seed, wave); }
+function chibi(x, y, seed, kind, face, step) { drawStaff(x - 1, y, seed, kind, face, step); }
+function tyreStack(x, y, n) {
+  n = n || 3;
+  for (let i = 0; i < n; i++) drawProp(PROP_TYRES, x, y - 4 - i * 4);
+}
+function tree(x, y, s, kind) {
+  drawProp(kind === "palm" ? PROP_PALM : PROP_PINE, x - 5, y - 10);
+}
+
 function drawRace() {
   const tk = R.tk, track = R.track;
   if (!VIEW) setupView(tk);
@@ -632,13 +564,11 @@ function drawRace() {
   drawOuterFurniture(tk, HALF, d0, d1, step);
 
   /* cars, back to front */
-  const carL = VIEW.sc * CAR_WORLD;
-  const carH = Math.max(3, VIEW.sc * 1.35);
+  const carL = VIEW.sc * CAR_WORLD * 1.15;
   const drawn = R.field.filter(c => !(c.dnf && c.done)).map(c => {
     const p = sampleTrack(tk, c.s);
     const w = W2S(offsetPoint(p, laneOffset(c.lane)));
-    const cor = boxCorners(p, laneOffset(c.lane), CAR_WORLD, CAR_WORLD * 0.47).map(W2S);
-    return { c, w, cor };
+    return { c, w, ang: W2Sang(p.h) };
   }).filter(o => onScreen(o.w, 60));
   drawn.sort((a, b) => a.w.y - b.w.y);
   for (const o of drawn) {
@@ -651,15 +581,32 @@ function drawRace() {
         px(q.x - s2 / 2, q.y - 1 - i, s2, s2, "rgba(186,146,96," + (0.34 / i).toFixed(2) + ")");
       }
     }
-    paintCar(o.cor, carH, c.col, c.num, carL);
+    /* ground shadow, then the baked sprite */
+    cx.save(); cx.scale(1, 0.5);
+    cx.fillStyle = "rgba(0,0,0,.25)";
+    cx.beginPath(); cx.ellipse(o.w.x, (o.w.y + 2) / 0.5, carL * 0.42, carL * 0.30, 0, 0, 7); cx.fill();
+    cx.restore();
+    drawCarSprite(o.w.x, o.w.y, o.ang, c.paintIdx, c.model, carL);
+    if (carL > 26) {
+      cx.font = "bold 7px monospace"; cx.textAlign = "center"; cx.textBaseline = "middle";
+      cx.lineWidth = 2.5; cx.strokeStyle = "rgba(20,22,27,.85)"; cx.lineJoin = "round";
+      cx.strokeText(String(c.num), o.w.x, o.w.y - carL * 0.16);
+      cx.fillStyle = "#ffffff";
+      cx.fillText(String(c.num), o.w.x, o.w.y - carL * 0.16);
+    }
     if (c.isP) {
       if (R.auraT > 0) {
         cx.strokeStyle = AURAS[R.auraTier].col; cx.lineWidth = 2;
         cx.strokeRect(o.w.x - carL * 0.62, o.w.y - carL * 0.42, carL * 1.24, carL * 0.84);
       }
-      const bob = Math.sin(frame / 6) * 1.4;
-      px(o.w.x - 3, o.w.y - carL * 0.62 - 8 + bob, 7, 4, "#ffd23f");
-      px(o.w.x - 1, o.w.y - carL * 0.62 - 4 + bob, 3, 3, "#ffd23f");
+      const bob = Math.round(Math.sin(frame / 7) * 1.6);
+      const my = o.w.y - carL * 0.55 - 11 + bob;
+      px(o.w.x - 5, my - 1, 11, 6, "#14161b");
+      px(o.w.x - 4, my, 9, 4, "#ffd23f");
+      px(o.w.x - 3, my + 4, 7, 2, "#14161b");
+      px(o.w.x - 2, my + 4, 5, 1, "#ffd23f");
+      px(o.w.x - 2, my + 5, 5, 2, "#14161b");
+      px(o.w.x - 1, my + 5, 3, 1, "#e0a800");
     }
     cx.globalAlpha = 1;
   }
