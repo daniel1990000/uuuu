@@ -4,8 +4,8 @@ const CACHE = "scs-v3";
 const ASSETS = [
   ".", "index.html",
   "css/game.css",
-  "js/data.js", "js/track.js", "js/state.js", "js/race.js", "js/sprites.js",
-  "js/render.js", "js/ui.js", "js/main.js",
+  "js/data.js", "js/track.js", "js/state.js", "js/race.js",
+  "js/sprites.js", "js/textures.js", "js/render.js", "js/ui.js", "js/main.js",
   "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png",
 ];

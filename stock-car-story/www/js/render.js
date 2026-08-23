@@ -11,6 +11,9 @@
 let cv, cx, CW = 200, CH = 400, SCALE = 2, frame = 0;
 let DPR = 1, PX = 2;        // PX = size of one "art pixel" in CSS pixels
 const U = () => PX / 2;     // scale for trackside furniture authored at PX=2
+/* How many CSS pixels one authored ground texel covers.  Tied to PX so
+   the aggregate in the asphalt is the same size as a pixel on a car. */
+const GTEXEL = () => PX * 0.85;
 
 function initRender() {
   cv = document.getElementById("scene");
@@ -797,14 +800,18 @@ function drawRace() {
   const HALF = VIEW.HALF;
   if (!SCENE) SCENE = buildScenery(tk, track, HALF);
 
-  dith(0, 0, CW, CH, dirt ? "#6fae46" : "#61ab41", dirt ? "#63a03e" : "#559a39", 6);
+  /* the ground everything else sits on: authored grass, or city
+     tarmac on the street circuits where there is no grass at all */
+  cx.beginPath(); cx.rect(0, 0, CW, CH);
+  if (track.surf === "street") fillWorldTex("street", GTEXEL(), "#4a5058");
+  else fillWorldTex("grass", GTEXEL(), "#559a39");
 
   const step = Math.max(5, 34 / VIEW.sc);
   const span = (CH / (VIEW.sc * SQ)) * 1.5 + 220;
   const d0 = me.s - span * 0.30, d1 = me.s + span * 0.85;
 
   /* --- infield grass, mown in bands that follow the track --- */
-  if (!dirt) {
+  if (track.surf !== "street") {
     for (let d = Math.floor(d0 / 34) * 34; d <= d1; d += 34) {
       const a1 = W2S(offsetPoint(sampleTrack(tk, d), HALF + 1));
       const a2 = W2S(offsetPoint(sampleTrack(tk, d), HALF + 110));
@@ -828,8 +835,7 @@ function drawRace() {
     for (const p of outer) cx.lineTo(p.x, p.y);
     for (let i = inner.length - 1; i >= 0; i--) cx.lineTo(inner[i].x, inner[i].y);
     cx.closePath();
-    cx.fillStyle = dirt ? "#96693a" : (road ? "#4b5058" : "#5c616a");
-    cx.fill();
+    fillWorldTex(surfaceTex(track), GTEXEL(), road ? "#4b5058" : "#5c616a");
     cx.save(); cx.clip();
 
     /* tonal banding across the width — fresh asphalt at the edges,
@@ -990,25 +996,28 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
     const bB = lift(W2S(offsetPoint(p2, -HALF - 9 - depth)), totalH);
     const uu = PX / 2;
 
-    /* the concrete substructure below the seating */
-    face(fA, fB, 7 * uu, "#7f8792");
-    /* the raked deck */
-    quadS(lift(fA, 7 * uu), lift(fB, 7 * uu), bB, bA, "#9aa2ab");
+    /* Substructure, deck and seats are all authored texture mapped onto
+       the quads the geometry already gives us, so the seat rows follow
+       the rake instead of being flat bands of grey. */
+    const dA = lift(fA, 7 * uu), dB = lift(fB, 7 * uu);
+    fillQuadTex(fA, fB, dA, "concrete", 1, 0.4);
+    const nRows = Math.max(1, Math.round(rows / 2));
+    fillQuadTex(dA, dB, { x: bA.x, y: bA.y }, "seats", 1.1, nRows);
 
-    /* an aisle every third segment splits the stand into sections */
+    /* an aisle every fourth section, cut through the seating */
     const aisle = Math.abs(Math.round(d / standStep)) % 4 === 0;
     if (aisle) {
       const mA = { x: (fA.x + fB.x) / 2, y: (fA.y + fB.y) / 2 };
       const mB = { x: (bA.x + bB.x) / 2, y: (bA.y + bB.y) / 2 };
-      cx.strokeStyle = "#c3cad4"; cx.lineWidth = 3 * uu;
+      cx.strokeStyle = "#b6bdc6"; cx.lineWidth = 3 * uu;
       cx.beginPath(); cx.moveTo(mA.x, mA.y - 7 * uu); cx.lineTo(mB.x, mB.y); cx.stroke();
     }
 
+    /* the crowd sits in the rows, in front of the authored seats */
     for (let rw = 0; rw < rows; rw++) {
       const t = (rw + 0.5) / rows;
       const sA = { x: fA.x + (bA.x - fA.x) * t, y: fA.y + (bA.y - fA.y) * t };
       const sB = { x: fB.x + (bB.x - fB.x) * t, y: fB.y + (bB.y - fB.y) * t };
-      quadS(sA, sB, lift(sB, 2 * uu), lift(sA, 2 * uu), rw % 2 ? "#b0b8c2" : "#a6aeb8");
       const seed = Math.abs((d * 5) | 0) + rw * 23;
       const segW = Math.hypot(sB.x - sA.x, sB.y - sA.y);
       const n = clamp(Math.round(segW / (6 * PX)), 1, 5);
@@ -1016,7 +1025,7 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
         if (aisle && k === Math.floor(n / 2)) continue;      // leave the aisle clear
         const t2 = (k + 0.35) / n;
         const sd2 = seed + k * 13;
-        if (sd2 % 12 === 0) continue;
+        if (sd2 % 12 === 0) continue;                        // an empty seat here and there
         spectator(sA.x + (sB.x - sA.x) * t2 - 2 * PX,
                   sA.y + (sB.y - sA.y) * t2 - 11 * PX, sd2, ((frame >> 4) + sd2) % 4 === 0);
       }
@@ -1033,13 +1042,15 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
     /* entrance tunnel at the base of every aisle */
     if (aisle) {
       const mA = { x: (fA.x + fB.x) / 2, y: (fA.y + fB.y) / 2 };
-      px(mA.x - 4 * uu, mA.y - 6 * uu, 8 * uu, 6 * uu, "#2f3646");
+      px(mA.x - 4 * uu, mA.y - 6 * uu, 8 * uu, 6 * uu, "#1b1f26");
       px(mA.x - 5 * uu, mA.y - 8 * uu, 10 * uu, 2 * uu, "#6d747d");
+      px(mA.x - 4 * uu, mA.y - 6 * uu, 8 * uu, uu, "#2a2f38");
     }
-    /* roof on columns over the main stand */
+    /* roof deck on columns over the main stand */
     if (main) {
       const rh = 26 * uu;
-      quadS(lift(bA, rh), lift(bB, rh), lift(bB, rh + 3 * uu), lift(bA, rh + 3 * uu), "#5f6874");
+      const rA = lift(bA, rh), rB = lift(bB, rh);
+      fillQuadTex(rA, rB, lift(rA, 3 * uu), "concrete", 1, 0.2);
       quadS(lift(bA, rh + 3 * uu), lift(bB, rh + 3 * uu),
             lift({ x: bB.x + 6 * uu, y: bB.y + 4 * uu }, rh + 3 * uu),
             lift({ x: bA.x + 6 * uu, y: bA.y + 4 * uu }, rh + 3 * uu), "#6d7682");
@@ -1050,8 +1061,11 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   /* --- the outer barrier ---
      Drawn as a constant-thickness ribbon rather than an extruded face:
      a wall running straight up the screen has no face area to show, so
-     extruding it vertically would make it disappear.                  */
+     extruding it vertically would make it disappear.  The face itself
+     is authored texture — SAFER steel on the ovals, poured concrete on
+     the street circuits — with the sponsor livery painted over it. */
   const AD = ["#e8332a", "#ffd23f", "#2255cc", "#3fae4a", "#ffffff", "#e9a11b"];
+  const street = R.track.surf === "street";
   const wallH = Math.max(4, VIEW.sc * 1.6);
   const wStep = Math.max(5, step * 1.8);
   const segs = [];
@@ -1061,14 +1075,15 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
     const a = segs[i], b = segs[i + 1];
     if (!onScreen(a, 70) && !onScreen(b, 70)) continue;
     const k = Math.abs(Math.floor((d0 + i * wStep) / 11));
-    cx.strokeStyle = AD[k % 6]; cx.lineWidth = wallH;
-    cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
-    cx.strokeStyle = k % 2 ? "#f4f7fb" : "#e3e8ef"; cx.lineWidth = wallH * 0.42;
-    cx.beginPath();
-    cx.moveTo(a.x, a.y - wallH * 0.5); cx.lineTo(b.x, b.y - wallH * 0.5); cx.stroke();
-    cx.strokeStyle = (k % 4 < 2) ? "#e8332a" : "#2255cc"; cx.lineWidth = wallH * 0.26;
-    cx.beginPath();
-    cx.moveTo(a.x, a.y - wallH * 0.78); cx.lineTo(b.x, b.y - wallH * 0.78); cx.stroke();
+    /* the authored panel face */
+    stripTex([a, b], -wallH, street ? "concwall" : "safer", Math.max(1, wallH / 12), 0);
+    /* a painted livery band across the middle third, which is what makes
+       a wall read as a racetrack rather than a kerb */
+    if (!street) {
+      cx.strokeStyle = AD[k % 6]; cx.lineWidth = wallH * 0.30;
+      cx.beginPath();
+      cx.moveTo(a.x, a.y - wallH * 0.30); cx.lineTo(b.x, b.y - wallH * 0.30); cx.stroke();
+    }
   }
   cx.strokeStyle = "#ffffff"; cx.lineWidth = 1.5 * U();
   cx.beginPath();
@@ -1078,16 +1093,21 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   }
   cx.stroke();
 
-  /* catch fence: posts plus a dithered mesh */
+  /* catch fence: authored mesh between real posts */
   if (VIEW.sc > 1.8) {
     const fh = wallH * 2.6;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i], b = segs[i + 1];
+      if (!onScreen(a, 60) && !onScreen(b, 60)) continue;
+      stripTex([a, b], -fh, "fence", Math.max(1, PX * 0.7), wallH);
+    }
     for (let i = 0; i < segs.length - 1; i += 2) {
       const a = segs[i];
       if (!onScreen(a, 50)) continue;
-      px(a.x, a.y - wallH - fh, 1, fh, "rgba(206,213,224,.9)");
+      px(a.x, a.y - wallH - fh, Math.max(1, U()), fh, "rgba(206,213,224,.9)");
     }
-    cx.strokeStyle = "rgba(210,218,230,.35)"; cx.lineWidth = 1;
-    for (let t = 0.35; t <= 1; t += 0.32) {
+    cx.strokeStyle = "rgba(214,222,234,.55)"; cx.lineWidth = Math.max(1, U());
+    for (const t of [0.5, 1]) {
       cx.beginPath();
       for (let i = 0; i < segs.length; i++) {
         const a = segs[i];

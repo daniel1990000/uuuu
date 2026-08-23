@@ -128,6 +128,7 @@ function startShop() {
 
 function boot() {
   initRender();
+  buildTextures();
 
   const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
   tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
