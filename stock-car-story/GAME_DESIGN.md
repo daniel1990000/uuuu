@@ -182,11 +182,44 @@ chassis maps to one, so machines look different as you develop them.
 Baking costs about 40 ms at boot and buys correct rotation with consistent
 lighting, which hand-drawing 32 frames per body per livery could not.
 
-## Part 4 — Presentation
+## Part 4 — Making it playable
 
-Chunky pixel art at low internal resolution (roughly 130×250 logical pixels),
-scaled up with `image-rendering: pixelated`, so every shape lands on a fat
-crisp pixel. Navy chrome bars top and bottom with gold LCD readouts and white
+A simulation nobody can navigate is not a game. Three things carry the
+player through:
+
+**The objective card.** A next-step engine (`nextStep()` in `ui.js`) reads the
+whole game state and returns one sentence plus the single button that acts on
+it — repair the machine, sign the sponsor waiting on you, research what you can
+afford, rest a tired driver, enter the next round of the championship. It sits
+under the status bar and updates as the clock runs, so there is never a moment
+where the answer to "what now?" is hidden in a menu.
+
+**A real tab bar.** Five permanent tabs — Team, Machines, Race, Develop, More —
+each a 52px touch target, with a red dot when something is waiting behind it.
+Develop groups research, parts, building and training, which are otherwise four
+separate trips through a menu.
+
+**A tappable shop.** The garage is not a picture. The machine on the lift, the
+crew on the floor, the sponsor banner and the tool bench each carry a floating
+label and open the matching screen when tapped.
+
+Type is set for a phone held at arm's length: 13px base, 44px minimum row
+height, and dialogs at 96% of screen width.
+
+## Part 5 — Presentation
+
+The canvas is backed by real device pixels (DPR up to 2) and drawn in CSS
+pixels, so lines and text are sharp rather than a stretched low-res bitmap.
+Sprites stay chunky because they are drawn at an explicit *art pixel* size
+(`PX`, 2–4 CSS px per authored pixel) — the pixel-art look without the
+blurry upscale.
+
+Two optimisations matter. The dithered ground fill originally stamped one
+rectangle per pixel and cost about 14 ms a frame on its own; it is now a
+cached 8×4 pattern tile. Flat sprites are baked once per variant into small
+canvases and blitted, so a two-hundred-strong crowd is two hundred
+`drawImage` calls rather than a few thousand fills. Frame time is about
+3 ms. Navy chrome bars top and bottom with gold LCD readouts and white
 rounded pill buttons; white dialogs with red title bars.
 
 **Shop scene**: corrugated-steel garage, wood floor, lift pad, tyre stacks,
@@ -201,7 +234,7 @@ auto-rotates and picks its vertical squash to fill a portrait screen.
 
 ---
 
-## Part 5 — Technical
+## Part 6 — Technical
 
 ```
 www/
@@ -231,7 +264,7 @@ See `RELEASE.md` for build and store submission, `STORE.md` for listing copy.
 
 ---
 
-## Part 6 — What I would build next
+## Part 7 — What I would build next
 
 In the order that would most improve the game:
 

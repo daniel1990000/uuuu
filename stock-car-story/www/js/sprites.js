@@ -44,6 +44,7 @@ const P = {
 /* Draw a flat pixel map at (x,y).  `sub` swaps palette entries,
    which is how one authored sprite becomes a whole crowd.        */
 function blitMap(map, x, y, sub) {
+  const u = PX;
   x = Math.round(x); y = Math.round(y);
   for (let r = 0; r < map.length; r++) {
     const row = map[r];
@@ -52,10 +53,41 @@ function blitMap(map, x, y, sub) {
       const ch = row[c];
       const col = ch && ch !== "." ? ((sub && sub[ch]) || P[ch] || null) : null;
       if (col === runCol && col !== null) continue;
-      if (runCol !== null) { cx.fillStyle = runCol; cx.fillRect(x + run, y + r, c - run, 1); }
+      if (runCol !== null) { cx.fillStyle = runCol; cx.fillRect(x + run * u, y + r * u, (c - run) * u, u); }
       run = c; runCol = col;
     }
   }
+}
+/* size of a flat sprite on screen */
+const sprW = m => Math.max(...m.map(r => r.length)) * PX;
+const sprH = m => m.length * PX;
+
+/* ---------- sprite cache ----------
+   A spectator is a dozen fill runs; there can be two hundred of them on
+   screen.  Bake each variant once into its own little canvas and blit it
+   instead — one drawImage per person.                                */
+let SPR_CACHE = new Map();
+let SPR_CACHE_PX = 0;
+function cachedSprite(key, map, sub) {
+  if (SPR_CACHE_PX !== PX) { SPR_CACHE = new Map(); SPR_CACHE_PX = PX; }
+  let c = SPR_CACHE.get(key);
+  if (c) return c;
+  const w = Math.max(...map.map(r => r.length)), h = map.length;
+  c = document.createElement("canvas");
+  c.width = Math.max(1, w * PX); c.height = Math.max(1, h * PX);
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  for (let r = 0; r < h; r++) {
+    const row = map[r];
+    for (let col = 0; col < row.length; col++) {
+      const ch = row[col];
+      if (!ch || ch === ".") continue;
+      g.fillStyle = (sub && sub[ch]) || P[ch] || "#f0f";
+      g.fillRect(col * PX, r * PX, PX, PX);
+    }
+  }
+  SPR_CACHE.set(key, c);
+  return c;
 }
 /* Same, but into an arbitrary 2D context (used while baking). */
 function blitMapTo(g, map, x, y, sub) {
@@ -151,8 +183,11 @@ function specSub(seed) {
 }
 /* one spectator; `wave` picks a cheering pose */
 function drawSpectator(x, y, seed, wave) {
+  const v = seed % 24;                       // 24 recolour variants is plenty
+  const poseIdx = wave ? (seed % 2 ? 8 : 9) : (seed % 8);
   const pose = wave ? (seed % 2 ? SPEC_B : SPEC_D) : SPEC_POSES[seed % 8];
-  blitMap(pose, x, y, specSub(seed));
+  const img = cachedSprite("sp" + poseIdx + "_" + v, pose, specSub(v));
+  cx.drawImage(img, Math.round(x), Math.round(y));
 }
 
 /* ---------- staff: big head, small body, four facings ---------- */
@@ -229,17 +264,21 @@ function drawStaff(x, y, seed, kind, facing, step) {
     A: sk, f: sk, m: "#c98a7a",
     n: "#2255cc", N: "#173a8c", y: "#ffd23f", Y: "#c79000",
   };
-  let map = facing === "up" ? STAFF_UP : (facing === "left" || facing === "right") ? STAFF_SIDE : STAFF_DOWN;
+  const face2 = facing === "up" ? "u" : (facing === "left" || facing === "right") ? "s" : "d";
+  const map = face2 === "u" ? STAFF_UP : face2 === "s" ? STAFF_SIDE : STAFF_DOWN;
+  const v = seed % 8;
+  const body = cachedSprite("st" + kind + face2 + v, map, sub);
+  const hat = kind === "crew" ? cachedSprite("hc" + v, CAP, sub)
+    : kind === "driver" ? cachedSprite("hd" + v, HELMET, sub)
+    : kind === "marshal" ? cachedSprite("hm" + v, MARSHAL_CAP, sub) : null;
+  const hatDy = kind === "driver" ? -2 * PX : -PX;
   cx.save();
-  if (facing === "left") { cx.translate(Math.round(x) + 10, Math.round(y)); cx.scale(-1, 1); x = 0; y = 0; }
-  else { cx.translate(Math.round(x), Math.round(y)); x = 0; y = 0; }
-  /* shadow, then a one-pixel bob while walking */
-  cx.fillStyle = "rgba(0,0,0,.22)"; cx.fillRect(1, 14, 8, 2);
-  const bob = step ? -1 : 0;
-  blitMap(map, 0, bob, sub);
-  if (kind === "crew") blitMap(CAP, 0, bob - 1, sub);
-  else if (kind === "driver") blitMap(HELMET, 0, bob - 2, sub);
-  else if (kind === "marshal") blitMap(MARSHAL_CAP, 0, bob - 1, sub);
+  if (facing === "left") { cx.translate(Math.round(x) + 10 * PX, Math.round(y)); cx.scale(-1, 1); }
+  else cx.translate(Math.round(x), Math.round(y));
+  cx.fillStyle = "rgba(0,0,0,.22)"; cx.fillRect(PX, 14 * PX, 8 * PX, 2 * PX);
+  const bob = step ? -PX : 0;
+  cx.drawImage(body, 0, bob);
+  if (hat) cx.drawImage(hat, 0, bob + hatDy);
   cx.restore();
 }
 
@@ -312,7 +351,14 @@ const PROP_TROPHY = [
   "..ddd..",
   ".ddddd.",
 ];
-function drawProp(map, x, y, sub) { blitMap(map, x, y, sub); }
+let PROP_KEY = 0;
+const PROP_KEYS = new WeakMap();
+function drawProp(map, x, y, sub) {
+  if (sub) { blitMap(map, x, y, sub); return; }
+  let k = PROP_KEYS.get(map);
+  if (k === undefined) { k = "pr" + (PROP_KEY++); PROP_KEYS.set(map, k); }
+  cx.drawImage(cachedSprite(k, map, null), Math.round(x), Math.round(y));
+}
 
 /* ============================================================
    VOXEL CAR MODELS
@@ -426,7 +472,7 @@ const CHASSIS_MODEL = {
 /* ---------- the baker ---------- */
 const CAR_FRAMES = 32;
 const VOX_SQ = 0.56;              // matches the ground-plane squash
-const CAR_CELL = 1.7;             // screen px per model cell
+let CAR_CELL = 1.7;               // screen px per model cell (scales with PX)
 let CAR_ATLAS = null;             // [colourIndex][frame] -> canvas
 let CAR_ATLAS_KEYS = null;
 
@@ -506,6 +552,7 @@ function outlinePass(canvas, colour) {
 }
 
 function buildCarAtlas() {
+  CAR_CELL = 1.7 * (PX / 2) * 1.25;      // more cells of detail at high dpi
   CAR_ATLAS = {};
   CAR_ATLAS_KEYS = Object.keys(CAR_MODELS);
   for (const key of CAR_ATLAS_KEYS) {

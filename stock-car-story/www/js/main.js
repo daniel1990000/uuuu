@@ -8,12 +8,15 @@ let weekAcc = 0, lastT = 0;
 
 function enterRaceMode() {
   MODE = "race";
+  $("objCard").classList.remove("on");
+  $("tabbar").style.display = "none";
   $("raceHud").style.display = "flex";
   $("auraBtn").style.display = "none";
   $("botbar").classList.add("racing");
 }
 function exitRaceMode() {
   MODE = "shop";
+  $("tabbar").style.display = "flex";
   $("raceHud").style.display = "none";
   $("botbar").classList.remove("racing");
 }
@@ -23,7 +26,7 @@ function loop(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts; frame++;
 
-  if (MODE === "title") { drawTitle(); return; }
+  if (MODE === "title") { $("tabbar").style.display = "none"; drawTitle(); return; }
   if (!G) return;
 
   if (MODE === "race") {
@@ -39,10 +42,12 @@ function loop(ts) {
       weekAcc = 0;
       advanceWeek();
       updateChrome();
+      refreshObjective();
       if (!G.ended && G.year === 14 && G.month === 4) { G.ended = true; showEndgame(); }
     }
   }
   drawGarage();
+  if (frame % 20 === 0) refreshObjective();
 }
 
 function updateRaceHud() {
@@ -82,7 +87,9 @@ function titleScreen() {
 }
 function startShop() {
   MODE = "shop";
+  $("tabbar").style.display = "flex";
   updateChrome();
+  refreshObjective();
   if (!G.seenIntro) {
     G.seenIntro = true;
     dlg("Welcome, boss",
@@ -92,14 +99,16 @@ function startShop() {
       "· <b>Train</b> your driver and <b>upgrade</b> the machine<br>" +
       "· <b>Sponsors</b> pay twice a year and unlock new gear<br>" +
       "· Win a championship to earn a bigger garage</span>",
-      [["Let's go racing", () => { closeDlg(); openMenu(); }]]);
+      [["Let's go racing", () => { closeDlg(); refreshObjective(); }]]);
   }
 }
 
 function boot() {
   initRender();
-  $("menuBtn").onclick = () => { if (MODE === "shop") openMenu(); };
   $("saveBtn").onclick = () => { if (MODE !== "shop") return; sfx("click"); toast(saveGame() ? "Game saved." : "Save failed — storage blocked."); };
+  const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
+  tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
+  tab("tabShop", scrDevelop); tab("tabMore", openMenu);
   $("drvPill").onclick = () => { if (MODE === "shop" && G && G.drivers.length) scrDriver(G.teams[G.curTeam].driver); };
   $("clockPill").onclick = () => {
     if (!G) return; sfx("click");
@@ -109,6 +118,15 @@ function boot() {
     updateChrome();
   };
   $("auraBtn").onclick = fireAura;
+  /* tapping the shop scene itself opens the matching screen */
+  const canvasTap = ev => {
+    if (MODE !== "shop" || dlgStack.length) return;
+    const r = cv.getBoundingClientRect();
+    const t = ev.changedTouches ? ev.changedTouches[0] : ev;
+    const action = hitHotspot(t.clientX - r.left, t.clientY - r.top);
+    if (action && window[action]) { sfx("click"); window[action](); }
+  };
+  $("scene").addEventListener("click", canvasTap);
   document.addEventListener("visibilitychange", () => { if (document.hidden && G && MODE === "shop") saveGame(); });
   window.addEventListener("pagehide", () => { if (G && MODE === "shop") saveGame(); });
   titleScreen();

@@ -50,7 +50,10 @@ function dlg(title, body, buttons) {
   d.querySelector(".bd").scrollTop = 0;
   return d;
 }
-function closeDlg() { const d = dlgStack.pop(); if (d) d.remove(); if (!dlgStack.length) $("dim").style.display = "none"; }
+function closeDlg() {
+  const d = dlgStack.pop(); if (d) d.remove();
+  if (!dlgStack.length) { $("dim").style.display = "none"; if (typeof refreshObjective === "function") refreshObjective(); }
+}
 function closeAllDlg() { while (dlgStack.length) closeDlg(); }
 function toast(msg) {
   const t = $("toast"); t.innerHTML = msg; t.style.display = "block";
@@ -110,7 +113,7 @@ function openMenu() {
   const items = [
     ["Team", "scrTeam", "👥"], ["Machines", "scrCars", "🏎"], ["Training", "scrTrain", "🏋"],
     ["Research", "scrResearch", "🔬"], ["Parts", "scrParts", "🔧"], ["Sponsors", "scrSponsors", "📣"],
-    ["Enter Race", "scrRaces", "🏁"], ["Standings", "scrRecords", "🏆"],
+    ["Enter Race", "scrRaces", "🏁"], ["Records", "scrRecords", "🏆"],
     ["Auras", "scrAuras", "✨"], ["Options", "scrOptions", "⚙"]];
   const badge = (f) => {
     if (f === "scrRaces" && !SEASON) return "";
@@ -648,4 +651,100 @@ function showEndgame() {
     "<tr><td>Total advertising</td><td>" + Math.round(G.stats.adTotal) + "</td></tr></table>" +
     "<div class='small dim' style='margin-top:6px'>Keep playing as long as you like — or start New Game+ from Options to carry your whole library into a fresh career.</div>",
     [["Keep racing", closeDlg]]);
+}
+
+/* ============================================================
+   NEXT STEP — the game always says what to do and offers the
+   one button that does it.  This is the difference between a
+   simulation and something a person can actually play.
+   ============================================================ */
+function nextStep() {
+  const t = G.teams[G.curTeam];
+  const car = G.cars[t.car], drv = G.drivers[t.driver];
+
+  if (!drv) return { t: "Your team has no driver. Pick one from <b>Team</b>.", b: "Team", f: scrTeam };
+  if (!car) return { t: "Your team has no machine. Pick one from <b>Machines</b>.", b: "Machines", f: scrCars };
+
+  const st = carStats(car);
+  if (G.repair) return { t: "The crew is repairing the machine — <b>" + G.repair.wks + " week(s)</b> left. Let the clock run.", b: "Wait", f: () => { G.set.paused = false; updateChrome(); } };
+  if (car.dur < st.maxdur * 0.35)
+    return { t: "#" + car.num + " is <b>badly damaged</b> and will blow up mid-race. Repair it first.", b: "Repair", f: () => { startRepair(t.car); updateChrome(); } };
+
+  if (SEASON) {
+    const tr = byId(TRACKS, SEASON.def.tracks[SEASON.round]);
+    return { t: SEASON.def.n + " — <b>round " + (SEASON.round + 1) + "</b> at " + tr.n + ".", b: "Race", f: () => nextSeasonRace() };
+  }
+  if (!G.stats.races)
+    return { t: "Time to go racing. Enter <b>Pine Ridge Bullring</b> and see where you stand.", b: "Race", f: scrRaces };
+
+  if (G.offers.length && G.sponsors.length < 2)
+    return { t: "A sponsor wants your car. Signing pays twice a year and unlocks new gear.", b: "Sponsors", f: scrSponsors };
+
+  if (drv.energy < 40)
+    return { t: esc(drv.name) + " is worn out (" + Math.floor(drv.energy) + "/100). Rest a few weeks before racing.", b: "Wait", f: () => { G.set.paused = false; updateChrome(); } };
+
+  const nc = availableCarBlueprints().filter(c => G.rp >= c.res);
+  const np = availablePartBlueprints().filter(p => G.rp >= p.res);
+  if (nc.length || np.length)
+    return { t: "You can research <b>" + ((nc[0] || np[0]).name) + "</b> with your research data.", b: "Research", f: scrResearch };
+
+  if (car.parts.length < st.exp && G.known.parts.some(id => G.money >= byId(PARTS, id).cost))
+    return { t: "#" + car.num + " has an <b>empty part slot</b>. Fitting a part makes it faster.", b: "Parts", f: scrParts };
+
+  const gl = GARAGES[G.garage + 1];
+  if (gl && (!gl.req || G.seriesWon[gl.req]) && G.money >= gl.cost)
+    return { t: "You can afford the <b>" + gl.n + "</b> — more crew, more machines, more teams.", b: "Upgrade", f: scrResearch };
+
+  const trainable = TRAININGS.filter(x => G.known.trains.includes(x.id) && G.money >= x.c && drv.energy >= x.e);
+  if (trainable.length && G.money > 200)
+    return { t: "Train " + esc(drv.name) + " — better stats win more races and earn better auras.", b: "Train", f: () => scrTrain(t.driver) };
+
+  const sd = SERIES.filter(s => G.garage >= s.req.garage && !G.seriesWon[s.id] && G.money >= s.fee).pop();
+  if (sd) return { t: "Enter the <b>" + sd.n + "</b> — winning it unlocks a bigger garage.", b: "Enter", f: scrRaces };
+
+  return { t: "Pick a race and go earn some money.", b: "Race", f: scrRaces };
+}
+
+function refreshObjective() {
+  if (!G || MODE !== "shop") { $("objCard").classList.remove("on"); return; }
+  if (dlgStack.length) { $("objCard").classList.remove("on"); return; }
+  const s = nextStep();
+  $("objText").innerHTML = s.t;
+  $("objBtn").textContent = s.b;
+  $("objBtn").onclick = () => { sfx("click"); s.f(); };
+  $("objCard").classList.add("on");
+  /* badge the tabs that have something waiting */
+  const badge = (id, on) => {
+    const el = $(id); if (!el) return;
+    let d = el.querySelector("i.dot");
+    if (on && !d) { d = document.createElement("i"); d.className = "dot"; el.appendChild(d); }
+    else if (!on && d) d.remove();
+  };
+  badge("tabShop", availableCarBlueprints().some(c => G.rp >= c.res) || availablePartBlueprints().some(p => G.rp >= p.res));
+  badge("tabRace", !!SEASON);
+  badge("tabMore", G.offers.length > 0 && G.sponsors.length < 2);
+  badge("tabTeam", anyAura());
+}
+
+/* the shop screen groups the development tools in one place */
+function scrDevelop() {
+  closeAllDlg();
+  const car = G.cars[G.teams[G.curTeam].car];
+  let h = "<div class='small dim'>Research data: <b class='b'>" + Math.floor(G.rp) +
+    " RP</b> · Money: <b class='g'>" + fmtK(G.money) + "</b></div><div class='mg' style='margin-top:8px'>" +
+    "<button class='pill mi' onclick='scrResearch()'><span class='ico'>🔬</span>Research</button>" +
+    "<button class='pill mi' onclick='scrParts()'><span class='ico'>🔧</span>Parts</button>" +
+    "<button class='pill mi' onclick='scrBuild()'><span class='ico'>🛠</span>Build</button>" +
+    "<button class='pill mi' onclick='scrTrain()'><span class='ico'>🏋</span>Training</button>" +
+    "</div>";
+  if (car) {
+    const s = carStats(car);
+    h += "<h4>Race machine</h4><div class='row'>" + carIcon(car) +
+      "<div class='f1'><b class='b'>#" + car.num + " " + esc(car.name) + "</b> " + libTag("car", car.id) +
+      "<div class='small dim'>Sp" + Math.floor(s.spd) + " Ac" + Math.floor(s.acc) + " Hd" + Math.floor(s.hdl) +
+      " · parts " + car.parts.length + "/" + s.exp + "</div>" +
+      bar(100 * car.dur / s.maxdur, car.dur < s.maxdur * 0.35 ? "d" : "") + "</div></div>";
+  }
+  h += "<div class='small dim' style='margin-top:8px'>Upgrades in Research are permanent — they raise every machine you build from that blueprint, and they carry into New Game+.</div>";
+  dlg("Develop", h, [["Close", closeDlg]]);
 }

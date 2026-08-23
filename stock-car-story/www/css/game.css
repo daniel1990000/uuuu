@@ -5,7 +5,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:#000;position:fixed;width:100%}
-body{font-family:'Press Start 2P','Courier New',monospace;font-size:10px;color:var(--ink);
+body{font-family:'Press Start 2P','Courier New',monospace;font-size:13px;color:var(--ink);
   touch-action:manipulation;-webkit-user-select:none;user-select:none;overscroll-behavior:none;
   -webkit-text-size-adjust:100%}
 #app{height:100dvh;height:100vh;max-width:600px;margin:0 auto;display:flex;flex-direction:column;
@@ -102,3 +102,49 @@ table.t tr.me{background:#fff6ce}
 #toast{position:absolute;top:13%;left:50%;transform:translateX(-50%);z-index:20;
   background:rgba(10,17,48,.95);color:#fff;border:2px solid #000;border-radius:8px;padding:8px 11px;
   font-size:8px;display:none;max-width:88%;text-align:center;line-height:1.7}
+
+
+/* ---------- objective card: always says what to do next ---------- */
+#objCard{flex:0 0 auto;z-index:7;display:none;margin:5px 6px 0;
+  background:linear-gradient(#fffdf4,#ffeec2);border:3px solid #000;border-radius:12px;
+  box-shadow:0 3px 0 rgba(0,0,0,.35);padding:8px 9px;align-items:center;gap:9px}
+#objCard.on{display:flex}
+#objText{flex:1;font-size:11px;line-height:1.6;color:#4a3400}
+#objText b{color:#a3160f}
+#objBtn{background:linear-gradient(#5fd36a,#2f9c3c);border:3px solid #000;border-radius:11px;
+  color:#04240a;font-family:inherit;font-size:12px;padding:12px 15px;box-shadow:0 3px 0 #17631f;
+  cursor:pointer;white-space:nowrap}
+#objBtn:active{transform:translateY(3px);box-shadow:none}
+
+/* ---------- tab bar ---------- */
+#tabbar{display:flex;gap:4px;padding:5px 5px 0;background:var(--navy3);
+  border-top:3px solid #000;flex:0 0 auto;z-index:6}
+.tab{flex:1;background:linear-gradient(#59657f,#3c465c);border:2px solid #000;
+  border-bottom:none;border-radius:10px 10px 0 0;color:#e8eefc;font-family:inherit;
+  font-size:9px;padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;
+  gap:4px;cursor:pointer;position:relative;min-height:52px;justify-content:center}
+.tab span{font-size:17px;line-height:1}
+.tab:active{transform:translateY(2px)}
+.tab.hot{background:linear-gradient(#ffdf7a,#f0a92b);color:#3a2400;border-color:#000}
+.tab i.dot{position:absolute;top:4px;right:8px;width:9px;height:9px;border-radius:50%;
+  background:var(--red);border:2px solid #000}
+#botbar{padding:6px 5px calc(env(safe-area-inset-bottom) + 6px)}
+#botbar .pill{font-size:11px;padding:11px 12px}
+#clockPill{min-width:86px}
+
+/* bigger, friendlier dialogs on a phone */
+.dlg{width:min(96%,520px)}
+.dlg .ttl{font-size:13px;padding:11px}
+.dlg .bd{padding:11px;font-size:12px}
+.dlg .bt .pill{font-size:11px;padding:13px 10px;min-width:88px}
+h4{font-size:11px;margin:12px 0 6px}
+.small{font-size:10px}
+.chip{font-size:9px;padding:2px 5px}
+.sg{font-size:10px} .sg b{font-size:12px}
+table.t{font-size:10px} table.t th{font-size:9px}
+.row{padding:9px 4px;min-height:44px}
+.mg .pill{padding:15px 4px;font-size:11px}
+.pill.mi .ico{font-size:16px}
+.face{width:30px;height:36px}
+.cicon{width:46px;height:27px}
+#toast{font-size:11px;padding:11px 14px}

@@ -9,6 +9,8 @@
 "use strict";
 
 let cv, cx, CW = 200, CH = 400, SCALE = 2, frame = 0;
+let DPR = 1, PX = 2;        // PX = size of one "art pixel" in CSS pixels
+const U = () => PX / 2;     // scale for trackside furniture authored at PX=2
 
 function initRender() {
   cv = document.getElementById("scene");
@@ -20,29 +22,60 @@ function initRender() {
 function resizeCanvas() {
   const w = document.getElementById("sceneWrap");
   const rw = w.clientWidth, rh = w.clientHeight;
-  SCALE = clamp(Math.round(rw / 200), 2, 3);
-  CW = Math.max(170, Math.floor(rw / SCALE));
-  CH = Math.max(220, Math.floor(rh / SCALE));
-  cv.width = CW; cv.height = CH;
+  /* Draw in CSS pixels but back the canvas with real device pixels, so
+     lines and text are sharp instead of a stretched low-res bitmap.
+     Sprites stay chunky because they are drawn PX css-px per art pixel. */
+  DPR = clamp(window.devicePixelRatio || 1, 1, 2);
+  CW = Math.max(300, Math.round(rw));
+  CH = Math.max(360, Math.round(rh));
+  PX = clamp(Math.round(CW / 190), 2, 4);
+  SCALE = PX;
+  cv.width = Math.round(CW * DPR);
+  cv.height = Math.round(CH * DPR);
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   cx.imageSmoothingEnabled = false;
+  DITH_CACHE = new Map();
+  CAR_ATLAS = null;                   // rebake at the new size
 }
 
 /* ---------- pixel helpers ---------- */
 function px(x, y, w, h, c) { cx.fillStyle = c; cx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); }
+/* Dithered fill.  The naive version stamped one rectangle per pixel and
+   cost ~14 ms a frame on a full-screen ground fill; this bakes the tile
+   once and lets the GPU repeat it.                                    */
+let DITH_CACHE = new Map();
+function dithPattern(c1, c2, step) {
+  const key = c1 + "|" + c2 + "|" + step;
+  let p = DITH_CACHE.get(key);
+  if (p) return p;
+  const t = document.createElement("canvas");
+  t.width = step * 2; t.height = 4;
+  const g = t.getContext("2d");
+  g.fillStyle = c1; g.fillRect(0, 0, t.width, t.height);
+  g.fillStyle = c2;
+  for (let j = 0; j < 4; j += 2)
+    for (let i = (((j / 2) | 0) % 2 ? 0 : 2); i < t.width; i += step) g.fillRect(i, j, 1, 1);
+  p = cx.createPattern(t, "repeat");
+  DITH_CACHE.set(key, p);
+  return p;
+}
 function dith(x, y, w, h, c1, c2, step) {
-  px(x, y, w, h, c1); cx.fillStyle = c2; step = step || 4;
-  for (let j = Math.round(y); j < y + h; j += 2)
-    for (let i = Math.round(x) + ((((j / 2) | 0) % 2) ? 0 : 2); i < x + w; i += step) cx.fillRect(i, j, 1, 1);
+  step = step || 4;
+  cx.save();
+  cx.translate(Math.round(x), Math.round(y));
+  cx.fillStyle = dithPattern(c1, c2, step);
+  cx.fillRect(0, 0, Math.round(w), Math.round(h));
+  cx.restore();
 }
 function txt(s, x, y, c, size, align) {
-  cx.fillStyle = c; cx.font = "bold " + (size || 7) + "px monospace";
+  cx.fillStyle = c; cx.font = "bold " + Math.round((size || 7) * PX) + "px monospace";
   cx.textAlign = align || "left"; cx.textBaseline = "alphabetic";
   cx.fillText(s, Math.round(x), Math.round(y));
 }
 function txtO(s, x, y, c, size, align) {          // outlined display text
-  cx.font = "bold " + (size || 7) + "px monospace";
+  cx.font = "bold " + Math.round((size || 7) * PX) + "px monospace";
   cx.textAlign = align || "left"; cx.textBaseline = "alphabetic";
-  cx.lineWidth = 3; cx.strokeStyle = "#101a45"; cx.lineJoin = "round";
+  cx.lineWidth = 3 * (PX / 2); cx.strokeStyle = "#101a45"; cx.lineJoin = "round";
   cx.strokeText(s, Math.round(x), Math.round(y));
   cx.fillStyle = c; cx.fillText(s, Math.round(x), Math.round(y));
 }
@@ -260,12 +293,14 @@ function syncWalkers() {
   walkers.length = staff.length;
   return staff;
 }
+let HOTSPOTS = [];
 function drawGarage() {
+  HOTSPOTS = [];
   const ROOM = 6;
   dith(0, 0, CW, CH, "#79c34d", "#6cb545", 6);
   /* fit the shop floor to the screen width */
-  TW = Math.max(11, Math.floor((CW * 0.92) / (2 * ROOM)));
-  TH = Math.max(6, Math.round(TW * 0.52));
+  TW = Math.max(11, Math.floor((CW * 0.96) / (2 * ROOM)));
+  TH = Math.max(6, Math.round(TW * 0.60));
   ISO.ox = Math.round(CW / 2);
   ISO.oy = Math.round(CH * 0.30);
 
@@ -366,7 +401,7 @@ function drawGarage() {
     isoBox(3.0, 3.0, 1.15, 1.15, 4, "#b8bfc8", "#8f97a1", "#a2aab4");
     const sz = Math.max(30, TW * 2.6);
     drawCarSprite(p.x, p.y - 8, -0.62, car.paint % 8, CHASSIS_MODEL[car.id] || "stock", sz);
-    txtO("#" + car.num + " " + esc(car.name), p.x, p.y + 20, "#ffffff", 7, "center");
+    tapLabel(p.x, p.y + 10 * PX + TH * 2.4, "#" + car.num + " " + car.name, "scrCars", sz * 1.2, sz);
   } });
 
   const staff = syncWalkers();
@@ -392,25 +427,68 @@ function drawGarage() {
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.f();
 
-  /* --- the yard in front of the shop --- */
-  const yardY = ISO.oy + ROOM * 2 * TH + 16;
-  dith(0, yardY, CW, CH - yardY, "#9aa0a8", "#8d939b", 6);
-  px(0, yardY, CW, 2, "#7b818a");
-  for (let i = 8; i < CW; i += 30) px(i, yardY + 12, 20, 2, "#e7eaee");
-  /* parked haulers and spare machines */
-  for (let i = 0; i < 3; i++) {
-    const hx = 10 + i * Math.round(CW / 3);
-    px(hx, yardY + 22, 34, 12, ["#e9eef5", "#c8d2de", "#eef1f6"][i]);
-    px(hx + 2, yardY + 25, 18, 5, ["#e8332a", "#2255cc", "#e9a11b"][i]);
-    px(hx + 3, yardY + 33, 6, 3, "#20232c"); px(hx + 24, yardY + 33, 6, 3, "#20232c");
+  /* tappable people: whoever is standing furthest forward gets the label */
+  {
+    const a = iso(0.5, 4.8);                       // by the tyre stacks, front-left
+    tapLabel(a.x + 6 * PX, a.y + 4 * PX, "Team", "scrTeam", 46 * (PX / 2), 30 * (PX / 2));
   }
-  /* fence with a few fans watching the shop */
-  const fy = yardY + 46;
-  px(0, fy, CW, 2, "#c9d0da");
-  for (let i = 4; i < CW; i += 14) px(i, fy, 2, 9, "#b3bac4");
-  for (let i = 6; i < CW - 8; i += 13)
-    if ((i * 7) % 5 < 3) spectator(i, fy + 10, i, ((frame >> 5) + i) % 3 === 0);
-  tree(14, CH - 8, 1); tree(CW - 16, CH - 6, 1);
+  {
+    const a = iso(1.4, -0.5);                      // the banner, high on the wall
+    tapLabel(a.x, a.y - WH + 26 * (PX / 2), G.sponsors.length ? "Sponsors" : "Get a sponsor",
+      "scrSponsors", 86 * (PX / 2), 26 * (PX / 2));
+  }
+  {
+    const a = iso(5.4, 0.6);                       // by the bench, back-right
+    tapLabel(a.x - 4 * PX, a.y + 4 * PX, "Develop", "scrDevelop", 60 * (PX / 2), 30 * (PX / 2));
+  }
+
+  /* --- the yard in front of the shop, laid out proportionally so it
+         always fills whatever space is left below the building --- */
+  const yardY = ISO.oy + ROOM * 2 * TH + 12;
+  const yh = Math.max(40, CH - yardY);
+  const Y = f => yardY + yh * f;
+  const u = PX / 2;
+  dith(0, yardY, CW, yh, "#9aa0a8", "#8d939b", 6);
+  px(0, yardY, CW, 2 * u, "#7b818a");
+
+  /* team haulers backed up to the shop */
+  const hw = 34 * u, hh = 12 * u;
+  for (let i = 0; i < 3; i++) {
+    const hx = 8 + i * Math.round((CW - 16 - hw) / 2);
+    px(hx, Y(0.06), hw, hh, ["#e9eef5", "#c8d2de", "#eef1f6"][i]);
+    px(hx + 2 * u, Y(0.06) + 3 * u, hw * 0.55, 5 * u, ["#e8332a", "#2255cc", "#e9a11b"][i]);
+    px(hx + 3 * u, Y(0.06) + hh, 6 * u, 3 * u, "#20232c");
+    px(hx + hw - 9 * u, Y(0.06) + hh, 6 * u, 3 * u, "#20232c");
+  }
+  /* drums, spare tyres and crates along the middle */
+  for (let i = 0; i < 6; i++) {
+    const bx = 14 + i * Math.round((CW - 34) / 6);
+    if (i % 3 === 0) tyreStack(bx, Y(0.40), 2);
+    else if (i % 3 === 1) drawProp(PROP_DRUM, bx, Y(0.34));
+    else drawProp(PROP_TOOLBOX, bx, Y(0.36));
+  }
+  /* painted parking bays */
+  cx.strokeStyle = "#e7eaee"; cx.lineWidth = 2 * u;
+  for (let i = 0; i < 6; i++) {
+    const bx = 10 + i * ((CW - 20) / 6);
+    cx.beginPath(); cx.moveTo(bx, Y(0.52)); cx.lineTo(bx, Y(0.66)); cx.stroke();
+  }
+  cx.beginPath(); cx.moveTo(0, Y(0.66)); cx.lineTo(CW, Y(0.66)); cx.stroke();
+
+  /* the fence and the fans who hang around outside it */
+  const fy = Y(0.74);
+  px(0, fy, CW, 2 * u, "#c9d0da");
+  for (let i = 4; i < CW; i += 13 * u) px(i, fy, 2 * u, 9 * u, "#b3bac4");
+  for (let i = 6; i < CW - 10; i += 11 * PX)
+    if ((i * 7) % 5 < 3) spectator(i, fy + 7 * u, i, ((frame >> 5) + i) % 3 === 0);
+
+  /* the access road running past the gate */
+  const ry = Y(0.90);
+  dith(0, ry, CW, CH - ry, "#7d838c", "#747a83", 6);
+  px(0, ry, CW, 2 * u, "#5c626b");
+  for (let i = 6; i < CW; i += 26 * u) px(i, ry + (CH - ry) / 2, 13 * u, 2 * u, "#e9e9e9");
+  tree(14 * u, ry - 2 * u, 1, "pine");
+  tree(CW - 14 * u, ry - 2 * u, 1, "pine");
 
   /* status bubbles */
   let by = Math.round(CH * 0.36) - 66;
@@ -430,6 +508,26 @@ function drawGarage() {
   if (G.offers.length && G.sponsors.length < 2) bubble("Sponsor offer!", "#c47b00");
 }
 
+/* A labelled, tappable spot in the shop.  The label is what turns a
+   pretty scene into something a player can actually operate.        */
+function tapLabel(x, y, text, action, w, h) {
+  HOTSPOTS.push({ x: x - w / 2, y: y - h, w, h, action });
+  cx.font = "bold " + Math.round(7 * PX) + "px monospace";
+  const tw = cx.measureText(text).width + 8 * PX;
+  const bx = Math.round(x - tw / 2), by = Math.round(y);
+  px(bx, by, tw, 11 * PX, "rgba(10,17,48,.90)");
+  px(bx, by, tw, 1.5 * PX, "#5f74c8");
+  px(bx + tw / 2 - 3 * PX, by - 3 * PX, 6 * PX, 3 * PX, "rgba(10,17,48,.90)");
+  txt(text, x, by + 8 * PX, "#ffffff", 7, "center");
+}
+function hitHotspot(cssX, cssY) {
+  for (let i = HOTSPOTS.length - 1; i >= 0; i--) {
+    const s = HOTSPOTS[i];
+    if (cssX >= s.x && cssX <= s.x + s.w && cssY >= s.y && cssY <= s.y + s.h) return s.action;
+  }
+  return null;
+}
+
 /* ============================================================
    RACE — diagonal 2.5D plane, camera follows your car
    ============================================================ */
@@ -439,7 +537,7 @@ let VIEW = null;
 const TARGET_ANG = -1.12;
 const SQ = 0.56;
 /* the car sits low and right, leaving the upper-left for wall + crowd */
-const ANCH_X = 0.60, ANCH_Y = 0.68;
+const ANCH_X = 0.56, ANCH_Y = 0.66;
 
 const CAR_WORLD = 5.6;                 // a stock car is 5.6 world units long
 function setupView(tk) {
@@ -447,7 +545,7 @@ function setupView(tk) {
      otherwise a 2.5-mile superspeedway renders the cars as specks.  The
      racing surface then gets a fixed world width, so it looks the same on
      every track and stays correctly thin relative to a long lap.        */
-  const carPx = clamp(CW * 0.15, 24, 38);
+  const carPx = clamp(CW * 0.115, 34, 100);
   const sc = carPx / CAR_WORLD;
   const HALF = (CW * 0.27) / sc;
   VIEW = { sc, HALF, cx: 0, cy: 0, rot: 0, ready: false };
@@ -481,14 +579,14 @@ const onScreen = (p, m) => p.x > -(m || 40) && p.x < CW + (m || 40) && p.y > -(m
 function laneOffset(lane) { return (0.5 - lane) * 2 * VIEW.HALF * 0.74; }
 
 /* ---- authored-sprite wrappers ---- */
-function spectator(x, y, seed, wave) { drawSpectator(x - 1, y, seed, wave); }
-function chibi(x, y, seed, kind, face, step) { drawStaff(x - 1, y, seed, kind, face, step); }
+function spectator(x, y, seed, wave) { drawSpectator(x - PX, y, seed, wave); }
+function chibi(x, y, seed, kind, face, step) { drawStaff(x - PX, y, seed, kind, face, step); }
 function tyreStack(x, y, n) {
   n = n || 3;
-  for (let i = 0; i < n; i++) drawProp(PROP_TYRES, x, y - 4 - i * 4);
+  for (let i = 0; i < n; i++) drawProp(PROP_TYRES, x, y - (4 + i * 4) * PX);
 }
 function tree(x, y, s, kind) {
-  drawProp(kind === "palm" ? PROP_PALM : PROP_PINE, x - 5, y - 10);
+  drawProp(kind === "palm" ? PROP_PALM : PROP_PINE, x - 5 * PX, y - 10 * PX);
 }
 
 function drawRace() {
@@ -502,7 +600,7 @@ function drawRace() {
 
   dith(0, 0, CW, CH, dirt ? "#6fae46" : "#61ab41", dirt ? "#63a03e" : "#559a39", 6);
 
-  const step = Math.max(3, 26 / VIEW.sc);
+  const step = Math.max(5, 34 / VIEW.sc);
   const span = (CH / (VIEW.sc * SQ)) * 1.5 + 220;
   const d0 = me.s - span * 0.30, d1 = me.s + span * 0.85;
 
@@ -531,7 +629,7 @@ function drawRace() {
     cx.stroke();
     cx.strokeStyle = dirt ? "rgba(120,88,48,.5)" : "rgba(255,255,255,.06)";
     cx.lineWidth = 1;
-    for (let d = Math.floor(d0 / 40) * 40; d <= d1; d += 40) {
+    for (let d = Math.floor(d0 / 55) * 55; d <= d1; d += 55) {
       const p = sampleTrack(tk, d);
       const a = W2S(offsetPoint(p, -HALF)), b = W2S(offsetPoint(p, HALF));
       cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
@@ -548,10 +646,10 @@ function drawRace() {
   cx.stroke();
 
   /* red-and-white kerbing on the inside of the corners */
-  for (let d = Math.floor(d0 / 6) * 6; d <= d1; d += 6) {
+  for (let d = Math.floor(d0 / 9) * 9; d <= d1; d += 9) {
     const p = sampleTrack(tk, d);
     if (p.c < 0.25) continue;
-    const p2 = sampleTrack(tk, d + 5.6);
+    const p2 = sampleTrack(tk, d + 8.6);
     const a1 = W2S(offsetPoint(p, HALF - 0.4)), a2 = W2S(offsetPoint(p, HALF - 2.6));
     const b1 = W2S(offsetPoint(p2, HALF - 0.4)), b2 = W2S(offsetPoint(p2, HALF - 2.6));
     if (!onScreen(a1, 40)) continue;
@@ -588,8 +686,8 @@ function drawRace() {
     cx.restore();
     drawCarSprite(o.w.x, o.w.y, o.ang, c.paintIdx, c.model, carL);
     if (carL > 26) {
-      cx.font = "bold 7px monospace"; cx.textAlign = "center"; cx.textBaseline = "middle";
-      cx.lineWidth = 2.5; cx.strokeStyle = "rgba(20,22,27,.85)"; cx.lineJoin = "round";
+      cx.font = "bold " + Math.round(7 * PX) + "px monospace"; cx.textAlign = "center"; cx.textBaseline = "middle";
+      cx.lineWidth = 2.5 * (PX / 2); cx.strokeStyle = "rgba(20,22,27,.85)"; cx.lineJoin = "round";
       cx.strokeText(String(c.num), o.w.x, o.w.y - carL * 0.16);
       cx.fillStyle = "#ffffff";
       cx.fillText(String(c.num), o.w.x, o.w.y - carL * 0.16);
@@ -599,14 +697,13 @@ function drawRace() {
         cx.strokeStyle = AURAS[R.auraTier].col; cx.lineWidth = 2;
         cx.strokeRect(o.w.x - carL * 0.62, o.w.y - carL * 0.42, carL * 1.24, carL * 0.84);
       }
-      const bob = Math.round(Math.sin(frame / 7) * 1.6);
-      const my = o.w.y - carL * 0.55 - 11 + bob;
-      px(o.w.x - 5, my - 1, 11, 6, "#14161b");
-      px(o.w.x - 4, my, 9, 4, "#ffd23f");
-      px(o.w.x - 3, my + 4, 7, 2, "#14161b");
-      px(o.w.x - 2, my + 4, 5, 1, "#ffd23f");
-      px(o.w.x - 2, my + 5, 5, 2, "#14161b");
-      px(o.w.x - 1, my + 5, 3, 1, "#e0a800");
+      const U2 = PX / 2;
+      const bob = Math.round(Math.sin(frame / 7) * 1.6 * U2);
+      const my = o.w.y - carL * 0.55 - 11 * U2 + bob;
+      px(o.w.x - 5 * U2, my - U2, 11 * U2, 6 * U2, "#14161b");
+      px(o.w.x - 4 * U2, my, 9 * U2, 4 * U2, "#ffd23f");
+      px(o.w.x - 3 * U2, my + 4 * U2, 7 * U2, 2 * U2, "#14161b");
+      px(o.w.x - 2 * U2, my + 4 * U2, 5 * U2, U2, "#ffd23f");
     }
     cx.globalAlpha = 1;
   }
@@ -620,17 +717,18 @@ function drawRace() {
   drawMiniMap(tk);
   if (R.phase === "grid") {
     const n = Math.ceil(R.timer);
-    px(CW / 2 - 34, CH / 2 - 22, 68, 34, "rgba(10,17,48,.85)");
-    px(CW / 2 - 34, CH / 2 - 22, 68, 3, "#3c50b0");
-    txtO(n > 0 ? String(n) : "GO!", CW / 2, CH / 2 + 4, "#ffd23f", 20, "center");
+    const bw = 40 * PX, bh = 20 * PX;
+    px(CW / 2 - bw / 2, CH / 2 - bh / 2, bw, bh, "rgba(10,17,48,.85)");
+    px(CW / 2 - bw / 2, CH / 2 - bh / 2, bw, PX, "#3c50b0");
+    txtO(n > 0 ? String(n) : "GO!", CW / 2, CH / 2 + 6 * (PX / 2), "#ffd23f", 18, "center");
   }
   if (R.msgT > 0) {
-    cx.font = "bold 8px monospace";
-    const w = Math.min(CW - 10, cx.measureText(R.msg).width + 18);
+    cx.font = "bold " + Math.round(8 * PX) + "px monospace";
+    const w = Math.min(CW - 8 * PX, cx.measureText(R.msg).width + 9 * PX);
     const col = /CAUTION|BIG ONE|DNF|BLOWN|PIT/.test(R.msg) ? "#e9a11b" : /GREEN|GO/.test(R.msg) ? "#3fae4a" : "#e8332a";
-    px(CW / 2 - w / 2, 6, w, 16, col);
-    px(CW / 2 - w / 2, 6, w, 3, "rgba(255,255,255,.45)");
-    txt(R.msg, CW / 2, 17, "#fff", 8, "center");
+    px(CW / 2 - w / 2, 4 * PX, w, 9 * PX, col);
+    px(CW / 2 - w / 2, 4 * PX, w, 1.5 * PX, "rgba(255,255,255,.45)");
+    txt(R.msg, CW / 2, 10.5 * PX, "#fff", 8, "center");
   }
 }
 
@@ -654,17 +752,18 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
 
   /* Grandstand: one solid raked deck per track segment, then the step
      nosings and the people sitting on them.  Drawn far-to-near.      */
-  for (let d = d0; d <= d1; d += step) {
+  const standStep = Math.max(8, step * 3);
+  for (let d = Math.floor(d0 / standStep) * standStep; d <= d1; d += standStep) {
     if (!onStraight(d)) continue;
     const p = sampleTrack(tk, d);
-    const p2 = sampleTrack(tk, d + step * 1.02);
-    const rows = isMain(d) ? 8 : 5;
+    const p2 = sampleTrack(tk, d + standStep * 1.02);
+    const rows = isMain(d) ? 6 : 4;
     const depth = rows * 2.1;
     const totalH = 7 + rows * 3.4;
-    const fA = W2S(offsetPoint(p, -HALF - 7)), fB = W2S(offsetPoint(p2, -HALF - 7));
+    const fA = W2S(offsetPoint(p, -HALF - 9)), fB = W2S(offsetPoint(p2, -HALF - 9));
     if (!onScreen(fA, 130) && !onScreen(fB, 130)) continue;
-    const bA = lift(W2S(offsetPoint(p, -HALF - 7 - depth)), totalH);
-    const bB = lift(W2S(offsetPoint(p2, -HALF - 7 - depth)), totalH);
+    const bA = lift(W2S(offsetPoint(p, -HALF - 9 - depth)), totalH);
+    const bB = lift(W2S(offsetPoint(p2, -HALF - 9 - depth)), totalH);
     /* the raked concrete deck */
     quadS(fA, fB, bB, bA, "#9aa2ab");
     /* step nosings + spectators, front row first */
@@ -675,8 +774,17 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
       quadS(sA, sB, lift(sB, 2), lift(sA, 2), rw % 2 ? "#b0b8c2" : "#a6aeb8");
       const seed = Math.abs((d * 5) | 0) + rw * 23;
       if (seed % 10 === 0) continue;
-      spectator(sA.x - 2, sA.y - 11, seed, ((frame >> 4) + seed) % 4 === 0);
-      if (VIEW.sc > 2.3 && seed % 3) spectator(sA.x + 3.5, sA.y - 10, seed + 7, ((frame >> 4) + seed) % 5 === 0);
+      /* fill the segment with as many people as its screen width allows */
+      const segW = Math.hypot(sB.x - sA.x, sB.y - sA.y);
+      const n = clamp(Math.round(segW / (6 * PX)), 1, 5);
+      for (let k = 0; k < n; k++) {
+        const t2 = (k + 0.35) / n;
+        const sx = sA.x + (sB.x - sA.x) * t2 - 2 * PX;
+        const sy = sA.y + (sB.y - sA.y) * t2 - 11 * PX;
+        const sd2 = seed + k * 13;
+        if (sd2 % 11 === 0) continue;
+        spectator(sx, sy, sd2, ((frame >> 4) + sd2) % 4 === 0);
+      }
     }
     /* roof on the main stand, on posts */
     if (isMain(d) && VIEW.sc > 2) {
@@ -692,13 +800,14 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
      extruding it vertically would make it disappear.                  */
   const AD = ["#e8332a", "#ffd23f", "#2255cc", "#3fae4a", "#ffffff", "#e9a11b"];
   const wallH = Math.max(4, VIEW.sc * 1.6);
+  const wStep = Math.max(5, step * 1.8);
   const segs = [];
-  for (let d = d0; d <= d1; d += step) segs.push(W2S(offsetPoint(sampleTrack(tk, d), -HALF - 2.2)));
+  for (let d = d0; d <= d1; d += wStep) segs.push(W2S(offsetPoint(sampleTrack(tk, d), -HALF - 2.2)));
   cx.lineCap = "butt"; cx.lineJoin = "round";
   for (let i = 0; i < segs.length - 1; i++) {
     const a = segs[i], b = segs[i + 1];
     if (!onScreen(a, 70) && !onScreen(b, 70)) continue;
-    const k = Math.abs(Math.floor((d0 + i * step) / 11));
+    const k = Math.abs(Math.floor((d0 + i * wStep) / 11));
     cx.strokeStyle = AD[k % 6]; cx.lineWidth = wallH;
     cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
     cx.strokeStyle = k % 2 ? "#f4f7fb" : "#e3e8ef"; cx.lineWidth = wallH * 0.42;
@@ -708,7 +817,7 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
     cx.beginPath();
     cx.moveTo(a.x, a.y - wallH * 0.78); cx.lineTo(b.x, b.y - wallH * 0.78); cx.stroke();
   }
-  cx.strokeStyle = "#ffffff"; cx.lineWidth = 1.5;
+  cx.strokeStyle = "#ffffff"; cx.lineWidth = 1.5 * U();
   cx.beginPath();
   for (let i = 0; i < segs.length; i++) {
     const a = segs[i];
@@ -740,8 +849,8 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
     const p = sampleTrack(tk, d);
     const q = W2S(offsetPoint(p, -HALF - 7));
     if (!onScreen(q, 50)) continue;
-    if (p.c > 0.35) tyreStack(q.x - 4, q.y, 3);
-    else if (Math.abs((d / 55) | 0) % 3 === 0) chibi(q.x - 4, q.y - 15, Math.abs((d / 55) | 0) % 8, "marshal", "down", 0);
+    if (p.c > 0.35) tyreStack(q.x - 4 * PX, q.y, 3);
+    else if (Math.abs((d / 55) | 0) % 3 === 0) chibi(q.x - 4 * PX, q.y - 15 * PX, Math.abs((d / 55) | 0) % 8, "marshal", "down", 0);
   }
   for (let d = Math.floor(d0 / 90) * 90; d <= d1; d += 90) {
     const q = W2S(offsetPoint(sampleTrack(tk, d), HALF + 26));
@@ -766,9 +875,9 @@ function drawPitRoad(tk, HALF) {
   for (let d = fs.start + step; d < fs.end - step; d += step * 1.6, i++) {
     const b = W2S(offsetPoint(sampleTrack(tk, d), HALF + 12));
     if (!onScreen(b, 40)) continue;
-    px(b.x - 4, b.y - 2, 9, 5, i === 0 ? "#e8332a" : "#c9cfd9");
-    px(b.x - 4, b.y - 2, 9, 1, "#8f97a3");
-    if (VIEW.sc > 2.2) chibi(b.x + 5, b.y - 14, i, "crew", "left", (frame >> 4) % 2);
+    px(b.x - 4 * PX, b.y - 2 * PX, 9 * PX, 5 * PX, i === 0 ? "#e8332a" : "#c9cfd9");
+    px(b.x - 4 * PX, b.y - 2 * PX, 9 * PX, PX, "#8f97a3");
+    chibi(b.x + 5 * PX, b.y - 14 * PX, i, "crew", "left", (frame >> 4) % 2);
   }
 }
 
@@ -789,11 +898,11 @@ function drawStartFinish(tk, HALF) {
     }
   }
   const st = W2S(offsetPoint(p, -HALF - 7));
-  px(st.x - 4, st.y - 22, 9, 22, "#c8ced8");
-  px(st.x - 5, st.y - 26, 11, 5, "#e8332a");
-  if (VIEW.sc > 2) chibi(st.x - 4, st.y - 40, 3, "marshal", "down", (frame >> 3) % 2);
+  px(st.x - 4 * (PX / 2), st.y - 22 * (PX / 2), 9 * (PX / 2), 22 * (PX / 2), "#c8ced8");
+  px(st.x - 5 * (PX / 2), st.y - 26 * (PX / 2), 11 * (PX / 2), 5 * (PX / 2), "#e8332a");
+  chibi(st.x - 4 * PX, st.y - 40 * (PX / 2) - 14 * PX, 3, "marshal", "down", (frame >> 3) % 2);
   const f = (frame >> 3) % 2;
-  for (let i = 0; i < 4; i++) px(st.x + 5, st.y - 24 + i * 2, 5, 2, (i + f) % 2 ? "#1c1c22" : "#ffffff");
+  for (let i = 0; i < 4; i++) px(st.x + 5 * PX, st.y - (24 - i * 2) * (PX / 2), 5 * PX, 2 * (PX / 2), (i + f) % 2 ? "#1c1c22" : "#ffffff");
 }
 
 /* The start/finish gantry spans over the track, so it is drawn after the
@@ -835,15 +944,15 @@ function drawGantry(tk, HALF) {
 
 /* corner mini-map so the whole circuit stays legible */
 function drawMiniMap(tk) {
-  const MW = Math.round(CW * 0.27), MH = Math.round(MW * 0.74);
-  const ox = CW - MW - 5, oy = 5;
-  px(ox - 2, oy - 2, MW + 4, MH + 4, "rgba(10,17,48,.82)");
-  px(ox - 2, oy - 2, MW + 4, 2, "#3c50b0");
+  const MW = Math.round(CW * 0.26), MH = Math.round(MW * 0.74);
+  const ox = CW - MW - 4 * PX, oy = 4 * PX;
+  px(ox - PX, oy - PX, MW + 2 * PX, MH + 2 * PX, "rgba(10,17,48,.85)");
+  px(ox - PX, oy - PX, MW + 2 * PX, PX, "#3c50b0");
   const b = tk.bounds;
   const s = Math.min((MW - 8) / (b.maxx - b.minx), (MH - 8) / (b.maxy - b.miny));
   const mx = ox + MW / 2, my = oy + MH / 2;
   const M = p => ({ x: mx + (p.x - (b.minx + b.maxx) / 2) * s, y: my + (p.y - (b.miny + b.maxy) / 2) * s });
-  cx.strokeStyle = "#8f9bb5"; cx.lineWidth = 2;
+  cx.strokeStyle = "#8f9bb5"; cx.lineWidth = 2 * (PX / 2);
   cx.beginPath();
   for (let i = 0; i < tk.pts.length; i += 4) {
     const q = M(tk.pts[i]);
@@ -851,11 +960,12 @@ function drawMiniMap(tk) {
   }
   cx.closePath(); cx.stroke();
   const sfp = M(sampleTrack(tk, tk.sfDist));
-  px(sfp.x - 1, sfp.y - 1, 3, 3, "#ffffff");
+  px(sfp.x - PX, sfp.y - PX, 2 * PX, 2 * PX, "#ffffff");
   for (const c of R.field) {
     if (c.done || c.dnf) continue;
     const q = M(sampleTrack(tk, c.s));
-    px(q.x - 1, q.y - 1, c.isP ? 4 : 3, c.isP ? 4 : 3, c.isP ? "#ffd23f" : c.col);
+    const s2 = (c.isP ? 2.4 : 1.8) * PX;
+    px(q.x - s2 / 2, q.y - s2 / 2, s2, s2, c.isP ? "#ffd23f" : c.col);
   }
 }
 
