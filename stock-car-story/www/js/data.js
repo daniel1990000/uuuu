@@ -10,7 +10,7 @@ const APT = { S: 1.25, A: 1.12, B: 1.0, C: 0.85, D: 0.68 };
 const APT_SYM = { S: "◎", A: "○", B: "○", C: "△", D: "✕" };
 
 /* Surface families a track can be */
-const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", dirt: "Dirt", road: "Road Course" };
+const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", road: "Road Course" };
 
 /* ---------- CARS (chassis) ----------
    res  = research points to unlock blueprint
@@ -20,84 +20,89 @@ const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", d
    unlock: {t:'start'|'date'|'race'|'sponsor'|'carUp'|'series', ...}          */
 const CARS = [
  {id:"street", name:"Street Stocker", rank:"E", res:0,   cost:100, dur:100, spd:35,  acc:30,  hdl:60,  exp:2, ad:"B", rep:"A",
-  apt:{short:"A",mid:"C",ss:"D",dirt:"C",road:"C"}, paint:true,  unlock:{t:"start"}},
+  apt:{short:"A",mid:"C",ss:"D",road:"C"}, paint:true,  unlock:{t:"start"}},
  {id:"late",   name:"Late Model",     rank:"D", res:60,  cost:300, dur:110, spd:65,  acc:60,  hdl:120, exp:2, ad:"B", rep:"A",
-  apt:{short:"S",mid:"B",ss:"C",dirt:"B",road:"C"}, paint:true,  unlock:{t:"race",id:"pineridge"}},
- {id:"dirtmod",name:"Dirt Modified",  rank:"D", res:40,  cost:300, dur:140, spd:70,  acc:60,  hdl:90,  exp:3, ad:"B", rep:"B",
-  apt:{short:"A",mid:"C",ss:"D",dirt:"S",road:"C"}, paint:true,  unlock:{t:"carUp",id:"street",pct:20}},
+  apt:{short:"S",mid:"B",ss:"C",road:"C"}, paint:true,  unlock:{t:"race",id:"pineridge"}},
+ {id:"dirtmod",name:"Short Track Modified", rank:"D", res:40,  cost:300, dur:140, spd:70,  acc:60,  hdl:90,  exp:3, ad:"B", rep:"B",
+  apt:{short:"A",mid:"C",ss:"D",road:"C"}, paint:true,  unlock:{t:"carUp",id:"street",pct:20}},
  {id:"dragster",name:"Dragster Stock",rank:"D", res:200, cost:0,   dur:60,  spd:90,  acc:80,  hdl:50,  exp:2, ad:"B", rep:"A",
-  apt:{short:"B",mid:"B",ss:"C",dirt:"D",road:"D"}, paint:true,  unlock:{t:"race",id:"saltflats"}},
+  apt:{short:"B",mid:"B",ss:"C",road:"D"}, paint:true,  unlock:{t:"race",id:"saltflats"}},
  {id:"truck",  name:"Race Truck",     rank:"C", res:80,  cost:500, dur:120, spd:90,  acc:70,  hdl:70,  exp:3, ad:"S", rep:"A",
-  apt:{short:"A",mid:"B",ss:"C",dirt:"A",road:"C"}, paint:false, unlock:{t:"sponsor",id:"bigrig"}},
+  apt:{short:"A",mid:"B",ss:"C",road:"C"}, paint:false, unlock:{t:"sponsor",id:"bigrig"}},
  {id:"pony",   name:"Pony Coupe",     rank:"C", res:280, cost:500, dur:100, spd:70,  acc:70,  hdl:80,  exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"B",ss:"B",dirt:"C",road:"A"}, paint:false, unlock:{t:"race",id:"hogback"}},
+  apt:{short:"B",mid:"B",ss:"B",road:"A"}, paint:false, unlock:{t:"race",id:"hogback"}},
  {id:"sonic",  name:"Sonic Stocker",  rank:"C", res:140, cost:600, dur:130, spd:90,  acc:100, hdl:160, exp:2, ad:"B", rep:"B",
-  apt:{short:"A",mid:"A",ss:"C",dirt:"D",road:"A"}, paint:true,  unlock:{t:"carUp",id:"late",pct:50}},
+  apt:{short:"A",mid:"A",ss:"C",road:"A"}, paint:true,  unlock:{t:"carUp",id:"late",pct:50}},
  {id:"torpedo",name:"Torpedo Body",   rank:"C", res:100, cost:400, dur:90,  spd:130, acc:150, hdl:80,  exp:2, ad:"B", rep:"B",
-  apt:{short:"C",mid:"A",ss:"A",dirt:"D",road:"C"}, paint:true,  unlock:{t:"carUp",id:"dragster",pct:50}},
+  apt:{short:"C",mid:"A",ss:"A",road:"C"}, paint:true,  unlock:{t:"carUp",id:"dragster",pct:50}},
  {id:"proto",  name:"Proto Stocker",  rank:"C", res:100, cost:600, dur:200, spd:110, acc:105, hdl:130, exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"B",ss:"B",dirt:"A",road:"B"}, paint:true,  unlock:{t:"carUp",id:"dirtmod",pct:50}},
+  apt:{short:"B",mid:"B",ss:"B",road:"B"}, paint:true,  unlock:{t:"carUp",id:"dirtmod",pct:50}},
  {id:"aero",   name:"Aero Coupe",     rank:"B", res:250, cost:900, dur:160, spd:140, acc:150, hdl:220, exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"A",ss:"B",dirt:"D",road:"A"}, paint:true,  unlock:{t:"carUp",id:"sonic",pct:50}},
+  apt:{short:"B",mid:"A",ss:"B",road:"A"}, paint:true,  unlock:{t:"carUp",id:"sonic",pct:50}},
  {id:"spiral", name:"Superbird",      rank:"B", res:200, cost:800, dur:120, spd:200, acc:190, hdl:100, exp:3, ad:"B", rep:"B",
-  apt:{short:"C",mid:"A",ss:"S",dirt:"D",road:"C"}, paint:true,  unlock:{t:"carUp",id:"torpedo",pct:50}},
+  apt:{short:"C",mid:"A",ss:"S",road:"C"}, paint:true,  unlock:{t:"carUp",id:"torpedo",pct:50}},
  {id:"hauler", name:"Big Block Brawler",rank:"A",res:800, cost:280, dur:280, spd:100, acc:250, hdl:50,  exp:4, ad:"B", rep:"C",
-  apt:{short:"A",mid:"B",ss:"C",dirt:"A",road:"C"}, paint:false, unlock:{t:"sponsor",id:"piggy"}},
+  apt:{short:"A",mid:"B",ss:"C",road:"C"}, paint:false, unlock:{t:"sponsor",id:"piggy"}},
  {id:"gen4",   name:"Gen-4 Cup Car",  rank:"A", res:200, cost:900, dur:240, spd:160, acc:150, hdl:155, exp:4, ad:"S", rep:"B",
-  apt:{short:"A",mid:"S",ss:"A",dirt:"C",road:"A"}, paint:true,  unlock:{t:"carUp",id:"proto",pct:50}},
+  apt:{short:"A",mid:"S",ss:"A",road:"A"}, paint:true,  unlock:{t:"carUp",id:"proto",pct:50}},
  {id:"moonshine",name:"Moonshine Special",rank:"S",res:12,cost:10, dur:10,  spd:210, acc:260, hdl:230, exp:4, ad:"S", rep:"S",
-  apt:{short:"S",mid:"A",ss:"A",dirt:"S",road:"B"}, paint:false, unlock:{t:"race",id:"thunderroad"}},
+  apt:{short:"S",mid:"A",ss:"A",road:"B"}, paint:false, unlock:{t:"race",id:"thunderroad"}},
  {id:"nextgen",name:"NextGen Cup",    rank:"S", res:400, cost:1200,dur:160, spd:200, acc:180, hdl:190, exp:4, ad:"B", rep:"B",
-  apt:{short:"A",mid:"S",ss:"S",dirt:"C",road:"S"}, paint:true,  unlock:{t:"carUp2",a:"spiral",b:"aero",pct:50}},
+  apt:{short:"A",mid:"S",ss:"S",road:"S"}, paint:true,  unlock:{t:"carUp2",a:"spiral",b:"aero",pct:50}},
 ];
 
 /* ---------- PARTS ----------
    fx keys: spd acc hdl dur ad(advert) drv(driver assist) sc(supercharge)
             turbo brake anl(analysis eff) xp  + surface bonuses on/off/ice→
-            short/mid/ss/dirt/road flat bonuses                              */
+            short/mid/ss/road flat bonuses                                  */
 const PARTS = [
- // Tires
- {id:"radial", name:"Street Radials",  cat:"Tires", rank:"D", res:20,  cost:40,  fx:{acc:5,hdl:5,short:4,dirt:5,road:5}, unlock:{t:"date",y:1,m:6}},
- {id:"knobby", name:"Dirt Knobbies",   cat:"Tires", rank:"C", res:30,  cost:140, fx:{hdl:5,dirt:20}, unlock:{t:"sponsor",id:"gator"}},
- {id:"rain",   name:"Rain Radials",    cat:"Tires", rank:"C", res:30,  cost:160, fx:{hdl:5,road:20}, unlock:{t:"race",id:"hogback"}},
- {id:"sport",  name:"Sport Slicks",    cat:"Tires", rank:"C", res:80,  cost:80,  fx:{acc:15,hdl:20,short:8}, unlock:{t:"partUp",id:"radial",pct:80}},
- {id:"higrip", name:"Hi-Grip Slicks",  cat:"Tires", rank:"B", res:120, cost:160, fx:{hdl:40}, unlock:{t:"partUp",id:"knobby",pct:60}},
- {id:"slick",  name:"Speedway Slicks", cat:"Tires", rank:"A", res:150, cost:200, fx:{acc:30,hdl:30,mid:10,ss:10,dirt:-20,road:-20}, unlock:{t:"partUp",id:"sport",pct:80}},
- // Engine
- {id:"v6",     name:"350 Small Block", cat:"Engine",rank:"E", res:30,  cost:100, fx:{spd:20,acc:5},  unlock:{t:"date",y:1,m:6}},
- {id:"v8",     name:"400 V8",          cat:"Engine",rank:"D", res:60,  cost:160, fx:{spd:40,acc:10}, unlock:{t:"partUp",id:"v6",pct:80}},
- {id:"v10",    name:"427 Big Block",   cat:"Engine",rank:"B", res:90,  cost:250, fx:{spd:60,acc:15}, unlock:{t:"partUp",id:"v8",pct:80}},
- {id:"v12",    name:"850hp Cup V8",    cat:"Engine",rank:"A", res:160, cost:400, fx:{spd:80,acc:20}, unlock:{t:"partUp",id:"v10",pct:100}},
- // Gear
- {id:"smless", name:"Synchro 4-Speed", cat:"Gear",  rank:"E", res:30,  cost:60,  fx:{acc:5},         unlock:{t:"date",y:1,m:10}},
- {id:"spdgear",name:"Speed Gears",     cat:"Gear",  rank:"C", res:60,  cost:100, fx:{spd:25,acc:-25},unlock:{t:"partUp",id:"smless",pct:60}},
- {id:"pwrgear",name:"Power Gears",     cat:"Gear",  rank:"C", res:60,  cost:100, fx:{spd:-25,acc:25},unlock:{t:"partUp",id:"smless",pct:80}},
- {id:"hispd",  name:"Hi-Speed Gears",  cat:"Gear",  rank:"B", res:100, cost:170, fx:{spd:50,acc:-40},unlock:{t:"partUp",id:"spdgear",pct:80}},
- // ECU
- {id:"ecu32",  name:"32-bit ECU",      cat:"ECU",   rank:"D", res:50,  cost:90,  fx:{drv:5},  unlock:{t:"sponsor",id:"sponge"}},
- {id:"ecu64",  name:"64-bit ECU",      cat:"ECU",   rank:"B", res:110, cost:130, fx:{drv:10}, unlock:{t:"partUp",id:"ecu32",pct:80}},
- // Induction
- {id:"blower", name:"Roots Blower",    cat:"Induction",rank:"B",res:80,cost:120, fx:{sc:100}, unlock:{t:"sponsor",id:"chimp"}},
- {id:"turbo",  name:"Turbocharger",    cat:"Induction",rank:"A",res:120,cost:150,fx:{turbo:50},unlock:{t:"partUp2",a:"blower",b:"v10",pct:80}},
- // Spoiler
- {id:"wing",   name:"Rear Spoiler",    cat:"Spoiler",rank:"C",res:50,  cost:80,  fx:{spd:-5,hdl:20}, unlock:{t:"date",y:2,m:3}},
- {id:"bigwing",name:"Tall Spoiler",    cat:"Spoiler",rank:"B",res:90,  cost:150, fx:{spd:-30,hdl:40},unlock:{t:"partUp",id:"wing",pct:80}},
- // Chassis
- {id:"ltchas", name:"Lightweight Frame",cat:"Chassis",rank:"C",res:60, cost:60,  fx:{spd:5,dur:25},  unlock:{t:"date",y:3,m:2}},
- {id:"cage",   name:"Chromoly Cage",   cat:"Chassis",rank:"B",res:100, cost:120, fx:{dur:50},        unlock:{t:"partUp",id:"ltchas",pct:80}},
- // Brakes
- {id:"cbrake", name:"Carbon Brakes",   cat:"Brakes",rank:"B", res:70,  cost:60,  fx:{brake:10},      unlock:{t:"sponsor",id:"honza"}},
- // Body
- {id:"aerobody",name:"Aero Body Kit",  cat:"Body",  rank:"A", res:150, cost:150, fx:{hdl:15,dur:40}, unlock:{t:"partUp2",a:"wing",b:"ltchas",pct:60}},
- // Other
- {id:"chains", name:"Rain Tear-offs",  cat:"Other", rank:"E", res:10,  cost:30,  fx:{road:5},        unlock:{t:"date",y:5,m:6}},
- {id:"coating",name:"Paint Coating",   cat:"Other", rank:"D", res:30,  cost:30,  fx:{dur:10},        unlock:{t:"date",y:1,m:6}},
- {id:"emblem", name:"Hood Decal",      cat:"Other", rank:"D", res:25,  cost:20,  fx:{ad:10},         unlock:{t:"sponsor",id:"racetrax"}},
- {id:"hyperoil",name:"Hyper Oil",      cat:"Other", rank:"D", res:70,  cost:50,  fx:{spd:3,acc:3,hdl:3}, unlock:{t:"sponsor",id:"mocha"}},
- {id:"camera", name:"Onboard Camera",  cat:"Other", rank:"B", res:70,  cost:60,  fx:{anl:10},        unlock:{t:"sponsor",id:"cheapy"}},
- {id:"goldegg",name:"Lucky Rooster",   cat:"Other", rank:"B", res:80,  cost:200, fx:{xp:80},         unlock:{t:"sponsor",id:"milky"}},
- {id:"pitgun", name:"Turbo Lug Gun",   cat:"Pit",   rank:"C", res:40,  cost:90,  fx:{pit:20},        unlock:{t:"sponsor",id:"wrench"}},
- {id:"fuelcell",name:"Long-Run Cell",  cat:"Pit",   rank:"C", res:50,  cost:110, fx:{fuel:30},       unlock:{t:"date",y:2,m:8}},
+ // --- Engine: the main speed ladder ---
+ {id:"v6",     name:"350 Small Block", cat:"Engine", rank:"D", res:30,  cost:100, fx:{spd:20,acc:5},
+  desc:"An honest short-track motor.", unlock:{t:"date",y:1,m:6}},
+ {id:"v8",     name:"400 V8",          cat:"Engine", rank:"C", res:60,  cost:180, fx:{spd:40,acc:10},
+  desc:"More cubic inches, more corner exit.", unlock:{t:"partUp",id:"v6",pct:80}},
+ {id:"v10",    name:"427 Big Block",   cat:"Engine", rank:"B", res:100, cost:280, fx:{spd:62,acc:16},
+  desc:"Serious power for the mile-and-a-halfs.", unlock:{t:"partUp",id:"v8",pct:80}},
+ {id:"v12",    name:"850hp Cup V8",    cat:"Engine", rank:"A", res:170, cost:420, fx:{spd:86,acc:22},
+  desc:"A full Cup-spec engine.", unlock:{t:"partUp",id:"v10",pct:100}},
+
+ // --- Tyres: grip, and what suits the surface ---
+ {id:"radial", name:"Street Radials",  cat:"Tyres",  rank:"D", res:20,  cost:40,  fx:{acc:5,hdl:8},
+  desc:"Cheap and durable. You will outgrow them.", unlock:{t:"date",y:1,m:6}},
+ {id:"sport",  name:"Sport Slicks",    cat:"Tyres",  rank:"C", res:70,  cost:110, fx:{acc:14,hdl:24,short:8},
+  desc:"Bites hard on the short tracks.", unlock:{t:"partUp",id:"radial",pct:80}},
+ {id:"slick",  name:"Speedway Slicks", cat:"Tyres",  rank:"B", res:130, cost:210, fx:{acc:26,hdl:30,mid:10,ss:12},
+  desc:"Built for sustained speed.", unlock:{t:"partUp",id:"sport",pct:80}},
+ {id:"rain",   name:"Rain Radials",    cat:"Tyres",  rank:"C", res:40,  cost:150, fx:{hdl:16,road:22},
+  desc:"For the road courses.", unlock:{t:"race",id:"hogback"}},
+
+ // --- Aero: downforce against drag ---
+ {id:"wing",   name:"Rear Spoiler",    cat:"Aero",   rank:"C", res:50,  cost:80,  fx:{spd:-4,hdl:22},
+  desc:"Plants the rear. Costs a little top end.", unlock:{t:"date",y:2,m:3}},
+ {id:"bigwing",name:"Tall Spoiler",    cat:"Aero",   rank:"B", res:95,  cost:160, fx:{spd:-18,hdl:44},
+  desc:"Maximum grip for the tight stuff.", unlock:{t:"partUp",id:"wing",pct:80}},
+ {id:"drafter",name:"Draft Package",   cat:"Aero",   rank:"A", res:150, cost:260, fx:{spd:22,hdl:6}, note:"Draft +25%",
+  desc:"Slippery in traffic — made for superspeedways.", unlock:{t:"sponsor",id:"honza"}},
+
+ // --- Chassis: handling and durability ---
+ {id:"susp",   name:"Race Suspension", cat:"Chassis",rank:"C", res:50,  cost:70,  fx:{hdl:16,dur:14},
+  desc:"Proper shocks and springs.", unlock:{t:"date",y:1,m:10}},
+ {id:"ltchas", name:"Lightweight Frame",cat:"Chassis",rank:"B",res:90,  cost:140, fx:{spd:10,acc:12,dur:20},
+  desc:"Less weight everywhere.", unlock:{t:"partUp",id:"susp",pct:80}},
+ {id:"cage",   name:"Chromoly Cage",   cat:"Chassis",rank:"A", res:130, cost:190, fx:{dur:60,hdl:8},
+  desc:"Survives contact — and the Big One.", unlock:{t:"partUp",id:"ltchas",pct:80}},
+
+ // --- Drivetrain ---
+ {id:"gear4",  name:"4-Speed Gearbox", cat:"Drive",  rank:"D", res:30,  cost:60,  fx:{acc:12},
+  desc:"Better ratios off the corner.", unlock:{t:"date",y:1,m:10}},
+ {id:"gear6",  name:"Close-Ratio Box", cat:"Drive",  rank:"B", res:100, cost:180, fx:{acc:26,spd:8},
+  desc:"Keeps the motor in its window.", unlock:{t:"partUp",id:"gear4",pct:80}},
+
+ // --- Pit equipment: stop time and fuel range ---
+ {id:"pitgun", name:"Turbo Lug Gun",   cat:"Pit",    rank:"C", res:40,  cost:90,  fx:{pit:22},
+  desc:"Seconds off every stop.", unlock:{t:"sponsor",id:"wrench"}},
+ {id:"fuelcell",name:"Long-Run Cell",  cat:"Pit",    rank:"C", res:50,  cost:120, fx:{fuel:30,dur:10},
+  desc:"Stretches a fuel run.", unlock:{t:"date",y:2,m:8}},
 ];
 
 /* ---------- DRIVERS ---------- (hire cost $K, salary derived) */
@@ -172,24 +177,24 @@ const CREW = [
    need = advertising points required to fill the gauge
    rw   = reward on filling: {t:'part'|'car'|'train'|'cash'|'rp', id/amt}   */
 const SPONSORS = [
- {id:"gator",   n:"Gator Grip Tires", cat:"Auto",  base:72,   need:80,  rw:{t:"part",id:"knobby"}},
+ {id:"gator",   n:"Gator Grip Tires", cat:"Auto",  base:72,   need:80,  rw:{t:"part",id:"susp"}},
  {id:"dry",     n:"Dry Springs Water",cat:"Service",base:137, need:105, rw:{t:"cash",amt:400}},
- {id:"mocha",   n:"Mocha Cola",       cat:"Food",  base:205,  need:130, rw:{t:"part",id:"hyperoil"}},
+ {id:"mocha",   n:"Mocha Cola",       cat:"Food",  base:205,  need:130, rw:{t:"cash",amt:500}},
  {id:"carbucks",n:"Carbucks Coffee",  cat:"Finance",base:365, need:155, rw:{t:"cash",amt:700}},
  {id:"cluck",   n:"Colonel Cluck's",  cat:"Food",  base:305,  need:180, rw:{t:"rp",amt:40}},
  {id:"frogger", n:"Froggerade",       cat:"Food",  base:300,  need:205, rw:{t:"train",id:"dragrace"}},
- {id:"sponge",  n:"Spongecorp",       cat:"Tech",  base:325,  need:230, rw:{t:"part",id:"ecu32"}},
- {id:"racetrax",n:"Race Trax",        cat:"Service",base:400, need:255, rw:{t:"part",id:"emblem"}},
- {id:"cheapy",  n:"Cheapy P's",       cat:"Tech",  base:437,  need:280, rw:{t:"part",id:"camera"}},
+ {id:"sponge",  n:"Spongecorp",       cat:"Tech",  base:325,  need:230, rw:{t:"rp",amt:60}},
+ {id:"racetrax",n:"Race Trax",        cat:"Service",base:400, need:255, rw:{t:"cash",amt:600}},
+ {id:"cheapy",  n:"Cheapy P's",       cat:"Tech",  base:437,  need:280, rw:{t:"rp",amt:90}},
  {id:"dairy",   n:"Dairy Duke",       cat:"Food",  base:441,  need:305, rw:{t:"train",id:"pwrslide"}},
  {id:"dull",    n:"Dull Computers",   cat:"Tech",  base:468,  need:330, rw:{t:"train",id:"rocket"}},
- {id:"milky",   n:"Milky Milk",       cat:"Food",  base:495,  need:355, rw:{t:"part",id:"goldegg"}},
+ {id:"milky",   n:"Milky Milk",       cat:"Food",  base:495,  need:355, rw:{t:"rp",amt:120}},
  {id:"bobs",    n:"Bob's Drugs",      cat:"Food",  base:525,  need:380, rw:{t:"train",id:"aerobics"}},
  {id:"adnd",    n:"AD&D Wireless",    cat:"Service",base:560, need:405, rw:{t:"train",id:"watchvids"}},
- {id:"chimp",   n:"Chimp Labs",       cat:"Tech",  base:330,  need:430, rw:{t:"part",id:"blower"}},
+ {id:"chimp",   n:"Chimp Labs",       cat:"Tech",  base:330,  need:430, rw:{t:"cash",amt:900}},
  {id:"wrench",  n:"Wrench Bros.",     cat:"Auto",  base:425,  need:455, rw:{t:"part",id:"pitgun"}},
  {id:"river",   n:"River Bank",       cat:"Finance",base:567, need:480, rw:{t:"train",id:"shopclass"}},
- {id:"honza",   n:"Honza Cars",       cat:"Auto",  base:450,  need:505, rw:{t:"part",id:"cbrake"}},
+ {id:"honza",   n:"Honza Cars",       cat:"Auto",  base:450,  need:505, rw:{t:"part",id:"drafter"}},
  {id:"nights",  n:"Nights Inn",       cat:"Service",base:495, need:530, rw:{t:"train",id:"gearshift"}},
  {id:"bigrig",  n:"Big Rig Diesel",   cat:"Auto",  base:577,  need:555, rw:{t:"car",id:"truck"}},
  {id:"microsloth",n:"Microsloth",     cat:"Finance",base:755, need:580, rw:{t:"train",id:"drift"}},
@@ -207,13 +212,13 @@ const TRAININGS = [
  {id:"weights",  n:"Weight Room",   c:22,  e:24, fx:{pd:4,st:1},              unlock:{t:"date",y:2,m:1}},
  {id:"sim",      n:"Race Simulator", c:38, e:26, fx:{st:4,an:2,tc:1},         unlock:{t:"date",y:3,m:1}},
  {id:"dragrace", n:"Drag Race",     c:45,  e:34, fx:{pd:6,sh:4},              unlock:{t:"sponsor",id:"frogger"}},
- {id:"pwrslide", n:"Power Slide",   c:52,  e:36, fx:{st:7,sh:3},              unlock:{t:"sponsor",id:"dairy"}},
+ {id:"pwrslide", n:"Traffic Drill",  c:52,  e:36, fx:{st:7,sh:3},              unlock:{t:"sponsor",id:"dairy"}},
  {id:"rocket",   n:"Rocket Science",c:60,  e:30, fx:{tc:8,an:5},              unlock:{t:"sponsor",id:"dull"}},
  {id:"aerobics", n:"Pit Aerobics",  c:48,  e:40, fx:{pd:4,sh:4,st:4},         unlock:{t:"sponsor",id:"bobs"}},
  {id:"watchvids",n:"Watch Race Tape",c:44, e:22, fx:{an:8,st:3},              unlock:{t:"sponsor",id:"adnd"}},
  {id:"shopclass",n:"Shop Class",    c:56,  e:28, fx:{tc:9,ap:2},              unlock:{t:"sponsor",id:"river"}},
  {id:"gearshift",n:"Gear Shift Drill",c:64,e:38, fx:{sh:9,pd:2},              unlock:{t:"sponsor",id:"nights"}},
- {id:"drift",    n:"Drift School",  c:80,  e:44, fx:{st:10,sh:4,ap:3},        unlock:{t:"sponsor",id:"microsloth"}},
+ {id:"drift",    n:"Road Course Camp",c:80, e:44, fx:{st:10,sh:4,ap:3},        unlock:{t:"sponsor",id:"microsloth"}},
  {id:"mediaday", n:"Media Day",     c:30,  e:16, fx:{ap:8},                   unlock:{t:"date",y:2,m:6}},
 ];
 
@@ -223,8 +228,8 @@ const TRAININGS = [
 const TRACKS = [
  {id:"pineridge",  n:"Pine Ridge Bullring", surf:"short", geo:"paperclip", mi:0.53, laps:30, fee:5,
   prize:[80,40,24,14,8,4],    fans:60,  ad:40,  unlock:{t:"start"}, desc:"A flat half-mile paperclip. Bumpers get used."},
- {id:"clayton",    n:"Clayton County Dirt", surf:"dirt",  geo:"dirtoval",  mi:0.50, laps:30, fee:8,
-  prize:[110,55,33,18,10,5],  fans:90,  ad:55,  unlock:{t:"race",id:"pineridge"}, desc:"Slick red clay. Throw it sideways."},
+ {id:"clayton",    n:"Clayton County Speedway", surf:"short", geo:"bowl",     mi:0.50, laps:30, fee:8,
+  prize:[110,55,33,18,10,5],  fans:90,  ad:55,  unlock:{t:"race",id:"pineridge"}, desc:"A tight, high-banked half-mile. Bumpers get used."},
  {id:"thunderbowl",n:"Thunder Bowl",        surf:"short", geo:"bowl",      mi:0.53, laps:40, fee:12,
   prize:[140,70,42,24,13,6],  fans:110, ad:70,  unlock:{t:"race",id:"pineridge"}, desc:"Concrete high banks. Loudest half-mile on earth."},
  {id:"boardwalk",  n:"Boardwalk Mile",      surf:"mid",   geo:"oval",      mi:1.00, laps:30, fee:16,
@@ -249,8 +254,8 @@ const TRACKS = [
   prize:[360,180,108,60,33,17],fans:280,ad:170, unlock:{t:"garage",lv:3}, desc:"Three corners, three personalities."},
  {id:"victorylane",n:"Victory Lane Classic",surf:"mid",   geo:"quadoval",  mi:1.50, laps:44, fee:50,
   prize:[520,260,156,87,48,24],fans:450,ad:250, unlock:{t:"race",id:"yellowhammer"}, desc:"The crown jewel. 600 miles of attrition."},
- {id:"thunderroad",n:"Thunder Road",        surf:"dirt",  geo:"dirtoval",  mi:0.75, laps:34, fee:46,
-  prize:[480,240,144,80,44,22],fans:400,ad:230, unlock:{t:"race",id:"clayton"}, desc:"Where the bootleggers started it all."},
+ {id:"thunderroad",n:"Thunder Road",        surf:"short", geo:"paperclip", mi:0.75, laps:34, fee:46,
+  prize:[480,240,144,80,44,22],fans:400,ad:230, unlock:{t:"race",id:"clayton"}, desc:"Where the bootleggers started it all. Flat and mean."},
  {id:"kairodome",  n:"Retro Dome",          surf:"short", geo:"bowl",      mi:0.75, laps:44, fee:60,
   prize:[620,310,186,104,57,29],fans:520,ad:300, unlock:{t:"series",id:"cup"}, desc:"An indoor short track. Pure chaos."},
 ];

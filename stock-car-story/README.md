@@ -19,10 +19,10 @@ Or open `dist/index.html` directly — the whole game is one self-contained file
 
 ## What's in it
 
-- **16 tracks** across short tracks, intermediates, superspeedways, dirt and a
-  road course — each built from real oval geometry, with straights, banked
-  corners, tri-oval doglegs and egg-shaped ends
-- **15 chassis** and **30 parts** in a permanent upgrade library that carries
+- **16 tracks** — short tracks, intermediates, superspeedways and a road
+  course — each built from real oval geometry, with straights, banked corners,
+  tri-oval doglegs and egg-shaped ends
+- **15 chassis** and **18 parts** in a permanent upgrade library that carries
   into New Game+
 - **36 drivers**, **23 crew chiefs**, **23 sponsors**, **15 training programmes**
 - **3 championships** with qualifying, stage points, cautions, pit strategy,

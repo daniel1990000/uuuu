@@ -390,11 +390,12 @@ function scrParts() {
     if (p.cat !== cat) { cat = p.cat; h += "<h4>" + cat + "</h4>"; }
     const on = car.parts.some(x => x.id === p.id);
     const e = libEntry("part", p.id);
-    const fx = Object.entries(p.fx).map(([k, v]) => k + (v > 0 ? "+" : "") + v).join(" ");
+    const fx = fxText(p.fx) + (p.note ? " · " + p.note : "");
     const canPay = G.money >= partCostUI(p);
     h += "<div class='row'><span class='chip rank'>" + p.rank + "</span>" +
       "<div class='f1'><b>" + p.name + "</b> <span class='chip lv'>Lv" + e.lv + "</span>" +
-      "<div class='small dim'>" + fx + (p.note ? " · " + p.note : "") + "</div>" +
+      "<div class='small dim'>" + esc(p.desc || "") + "</div>" +
+      "<div class='small'>" + fx + "</div>" +
       "<div class='small'>" + fmtK(partCostUI(p)) + "</div></div>" +
       (on ? "<span class='chip gold'>FITTED</span>"
         : "<button class='pill" + (canPay && car.parts.length < s.exp ? "" : " off") +
@@ -402,6 +403,16 @@ function scrParts() {
   });
   dlg("Parts", h, [["Close", () => closeAllDlg()]]);
 }
+/* Part effects in words, so the list reads without a legend. */
+const FX_NAME = { spd: "Speed", acc: "Accel", hdl: "Handling", dur: "Durability",
+  short: "Short track", mid: "Intermediate", ss: "Superspeedway", road: "Road course",
+  pit: "Pit speed", fuel: "Fuel range", ad: "Advertising" };
+function fxText(fx) {
+  return Object.entries(fx).map(([k, v]) =>
+    "<b class='" + (v > 0 ? "g" : "r") + "'>" + (v > 0 ? "+" : "") + v + "</b> " + (FX_NAME[k] || k)
+  ).join(" · ");
+}
+
 /* the sponsor perk that discounts parts is applied here */
 function partCostUI(p) {
   let c = p.cost;
@@ -450,8 +461,8 @@ function scrResearch() {
   const known = isCar ? G.known.cars : G.known.parts;
   const nameOf = o => isCar ? o.name : o.name;
   const descOf = o => isCar
-    ? ("Sp" + o.spd + " Ac" + o.acc + " Hd" + o.hdl + " · Dur" + o.dur + " · " + o.exp + " slots")
-    : (o.cat + " · " + Object.entries(o.fx).map(([k2, v]) => k2 + (v > 0 ? "+" : "") + v).join(" "));
+    ? ("Speed " + o.spd + " · Accel " + o.acc + " · Handling " + o.hdl + " · " + o.exp + " slots")
+    : (o.desc || o.cat);
 
   /* step 1 — new blueprints you can research now */
   const avail = all.filter(o => !known.includes(o.id) && condMet(o.unlock) && !(o.secret && !G.seriesWon.cup));

@@ -74,7 +74,7 @@ The management layer is kept whole. The racing layer is rebuilt around ovals.
 | Source formula | Stock Car Story |
 |---|---|
 | Road circuits | Real oval geometry: short tracks → superspeedways |
-| On-road / off-road / icy | Short / Intermediate / Superspeedway / Dirt / Road |
+| On-road / off-road / icy | Short track / Intermediate / Superspeedway / Road course |
 | Three formula series | Rookie Cup → National Series → Premier Cup |
 | Steer | Steer, and the draft that goes with it |
 | 1–2 lap sprints | 16–44 lap races with pit strategy and cautions |
@@ -100,7 +100,6 @@ Ten shapes ship, each matching a real archetype:
 | `doval` | D-shaped two-mile | gentle bowed frontstretch |
 | `eggoval` | egg-shaped | one end far tighter than the other |
 | `triangle` | three-cornered | three radii, three straight lengths |
-| `dirtoval` | dirt | wide, sweeping, low bank |
 | `road` | road course | esses, a hairpin, a long back straight |
 
 Banking is per-segment and feeds grip. Curvature feeds cornering loss, tyre
@@ -147,10 +146,16 @@ without feeling unfair.
 
 ### Content
 
-- **16 tracks** across five surfaces, unlocked by wins, garage level and series
+- **16 tracks** across four surfaces — six short tracks, six intermediates,
+  three superspeedways and a road course. No dirt: this is a stock car game,
+  and every extra surface was another aptitude column to reason about for
+  very little in return.
 - **15 chassis** (E→S rank) with per-surface aptitudes and 2–4 part slots
-- **30 parts** in ten categories, including hidden stats (driver assist,
-  supercharge, turbo, braking, advertising, analysis, XP, pit speed, fuel)
+- **18 parts** in six categories — Engine, Tyres, Aero, Chassis, Drivetrain,
+  Pit — each a short ladder you upgrade rather than a wide shelf you browse.
+  Every part carries a one-line description and its effects in words, so the
+  list reads without a legend. Superchargers and turbos are gone: stock cars
+  are naturally aspirated, and they were three categories of noise.
 - **36 drivers**, **23 crew**, **23 sponsors**, **15 training programmes**
 - **3 championships**, ladder-gated by garage level
 

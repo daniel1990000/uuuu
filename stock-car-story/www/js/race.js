@@ -104,7 +104,6 @@ function raceLanes(surf) {
   if (surf === "ss")   return { lo: 0.10, hi: 0.90, line: 0.34 };   // three wide
   if (surf === "mid")  return { lo: 0.14, hi: 0.86, line: 0.34 };
   if (surf === "road") return { lo: 0.18, hi: 0.82, line: 0.40 };
-  if (surf === "dirt") return { lo: 0.14, hi: 0.86, line: 0.44 };
   return { lo: 0.20, hi: 0.80, line: 0.32 };                        // short track, two wide
 }
 /* signed gap to another car along the lap, in world units */
@@ -185,7 +184,7 @@ function raceTick(dt) {
     /* grip: tyres, corner tightness, banking helps, surface matters */
     const grip = (0.80 + 0.20 * (c.tyre / 100)) * (1 + bank / 220);
     /* cornering cost: tight corners scrub speed unless handling is high */
-    const cornerCost = curv * (1.0 - Math.min(0.55, c.perf / 340)) * (track.surf === "dirt" ? 0.85 : 1);
+    const cornerCost = curv * (1.0 - Math.min(0.55, c.perf / 340));
     let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42);
     if (c.brake) target *= 1 + Math.min(0.05, c.brake / 400) * curv;
 
@@ -199,8 +198,7 @@ function raceTick(dt) {
       }
     }
     if (c.isP && R.auraT > 0) target *= AURAS[R.auraTier].boost;
-    if (track.surf === "dirt") target *= rnd(0.965, 1.035);
-    else target *= rnd(0.99, 1.01);
+    target *= rnd(0.99, 1.01);
 
     if (R.yellow) {
       target = Math.min(target, 20);
@@ -267,7 +265,7 @@ function raceTick(dt) {
       if (c.isP) {
         /* a healthy car spends roughly a fifth of its durability per race,
            more on the rough stuff, so it lasts about five events */
-        const wearMul = { short: 1.35, dirt: 1.4, ss: 1.1, mid: 1.0, road: 1.15 }[track.surf];
+        const wearMul = { short: 1.35, ss: 1.1, mid: 1.0, road: 1.15 }[track.surf];
         c.dur = Math.max(0, c.dur - (c.maxdur * 0.20 / track.laps) * wearMul * rnd(0.7, 1.4));
         R.rp += 1 + (c.anl || 10) / 26;
         R.ad += (c.adRate || 10) / 14;
@@ -313,7 +311,7 @@ function onLeaderLap() {
   }
   /* cautions */
   if (!R.yellow && R.leader.lap < track.laps - 1) {
-    const base = { short: 0.045, mid: 0.028, ss: 0.042, dirt: 0.05, road: 0.018 }[track.surf];
+    const base = { short: 0.045, mid: 0.028, ss: 0.042, road: 0.018 }[track.surf];
     if (Math.random() < base) throwCaution();
   }
 }

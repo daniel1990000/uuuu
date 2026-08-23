@@ -35,6 +35,8 @@ const P = {
   y: "#ffd23f",
   n: "#2255cc",
   q: "#3fae4a",
+  Q: "#6ddf74",   // leaf highlight
+  Y: "#c79000",   // gold shade
   d: "#6d4520",   // wood
   D: "#8a6a3c",
   x: "#c0392b",
@@ -393,22 +395,23 @@ const VOX = {
   "A": { h: 3.6, c: "#c3cad4" },  // cab pillar / roll cage
 };
 
-/* Every model is a top-down pixel map, 26 long × 12 wide.
+/* Every model is a top-down pixel map, 26 long x 12 wide.
    Columns run rear (left) to nose (right); the middle rows carry the
-   cabin, the outer rows the fenders, so the shape reads from above. */
+   cabin, the outer rows the fenders, and rows 2 and 9 stop short of the
+   nose so the body tapers instead of reading as a slab. */
 
-/* --- standard stock car: fendered saloon --- */
+/* --- standard stock car: fendered saloon, tapered nose and tail --- */
 const CAR_STOCK = [
   "...TTTTT.........TTTTT....",
   ".##ttttt#########ttttt###.",
-  "KXBBBBBBBBBBBBBBBBHHHHHHLK",
-  "SPBBCCBBBBBBBBBBBBHHHHHHLK",
+  ".KBBBBBBBBBBBBBBBBHHHHHHG.",
+  "XKBBCCBBBBBBBBBBBBHHHHHHLK",
   "SPBBBBBBBVVRRRRRWWHHHHHHGK",
   "SPBBBBBBBVVRNNNRWWhhhhhhGK",
   "SPBBBBBBBVVRNNNRWWhhhhhhGK",
   "SPBBBBBBBVVRRRRRWWHHHHHHGK",
-  "SPBBCCBBBBBBBBBBBBHHHHHHLK",
-  "KXBBBBBBBBBBBBBBBBHHHHHHLK",
+  "XKBBCCBBBBBBBBBBBBHHHHHHLK",
+  ".KBBBBBBBBBBBBBBBBHHHHHHG.",
   ".##ttttt#########ttttt###.",
   "...TTTTT.........TTTTT....",
 ];
@@ -417,43 +420,43 @@ const CAR_STOCK = [
 const CAR_AERO = [
   "...TTTTT..........TTTTT...",
   ".##ttttt##########ttttt##.",
-  "KXBBBBBBBBBBBBBBBhhhhhhhLK",
-  "SSBBCCBBBBBBBBBBBhhhhhhhLK",
-  "SPBBBBBBBVVRRRRWWhhhhhhhGK",
+  ".KBBBBBBBBBBBBBBBhhhhhhhG.",
+  "XKBBCCBBBBBBBBBBBhhhhhhhLK",
+  "SSBBBBBBBVVRRRRWWhhhhhhhGK",
   "SPBBBBBBBVVRNNRWWhhhhhhhGK",
   "SPBBBBBBBVVRNNRWWhhhhhhhGK",
-  "SPBBBBBBBVVRRRRWWhhhhhhhGK",
-  "SSBBCCBBBBBBBBBBBhhhhhhhLK",
-  "KXBBBBBBBBBBBBBBBhhhhhhhLK",
+  "SSBBBBBBBVVRRRRWWhhhhhhhGK",
+  "XKBBCCBBBBBBBBBBBhhhhhhhLK",
+  ".KBBBBBBBBBBBBBBBhhhhhhhG.",
   ".##ttttt##########ttttt##.",
   "...TTTTT..........TTTTT...",
 ];
 
-/* --- race truck: tall square cab, flat bed behind --- */
+/* --- race truck: tall square cab over a flat bed --- */
 const CAR_TRUCK = [
   "...TTTTT.........TTTTT....",
   ".##ttttt#########ttttt###.",
-  "KXBBBBBBBBAAAAAAWWHHHHHHLK",
-  "KXBBBBBBBBARRRRAWWHHHHHHLK",
-  "KKBBBBBBBBARRRRAWWHHHHHHGK",
-  "KKBBNNBBBBARRRRAWWhhhhhhGK",
-  "KKBBNNBBBBARRRRAWWhhhhhhGK",
-  "KKBBBBBBBBARRRRAWWHHHHHHGK",
-  "KXBBBBBBBBARRRRAWWHHHHHHLK",
-  "KXBBBBBBBBAAAAAAWWHHHHHHLK",
+  ".KBBBBBBBBAAAAAAWWHHHHHHG.",
+  "XKBBBBBBBBARRRRAWWHHHHHHLK",
+  "XKBBBBBBBBARRRRAWWHHHHHHGK",
+  "XKBBNNBBBBARRRRAWWhhhhhhGK",
+  "XKBBNNBBBBARRRRAWWhhhhhhGK",
+  "XKBBBBBBBBARRRRAWWHHHHHHGK",
+  "XKBBBBBBBBARRRRAWWHHHHHHLK",
+  ".KBBBBBBBBAAAAAAWWHHHHHHG.",
   ".##ttttt#########ttttt###.",
   "...TTTTT.........TTTTT....",
 ];
 
-/* --- dirt modified: wheels outside the body, roof wing, open cockpit --- */
+/* --- short-track modified: wheels outside the body, roof wing --- */
 const CAR_MOD = [
   "..TTTTTT........TTTTTT....",
   "..TTTTTT........TTTTTT....",
   "..tttttt........tttttt....",
   "...SSSSSSSSSSSSSS.........",
   "...#BBBBBBBBBBBBBhhhhhGK..",
-  "...PBBNNBAADdAAWBhhhhhGK..",
-  "...PBBNNBAADdAAWBhhhhhGK..",
+  "...PBBNNBARDdAWBhhhhhGK...",
+  "...PBBNNBARDdAWBhhhhhGK...",
   "...#BBBBBBBBBBBBBhhhhhGK..",
   "...SSSSSSSSSSSSSS.........",
   "..tttttt........tttttt....",
@@ -470,7 +473,7 @@ const CHASSIS_MODEL = {
 };
 
 /* ---------- the baker ---------- */
-const CAR_FRAMES = 32;
+const CAR_FRAMES = 64;
 const VOX_SQ = 0.56;              // matches the ground-plane squash
 let CAR_CELL = 1.7;               // screen px per model cell (scales with PX)
 let CAR_ATLAS = null;             // [colourIndex][frame] -> canvas
@@ -564,7 +567,10 @@ function buildCarAtlas() {
     });
   }
 }
-/* Blit a baked car.  `ang` is the screen-space heading. */
+/* Blit a baked car.  `ang` is the car's heading in VIEW space (world
+   heading + camera rotation) — NOT the squashed screen angle.  The bake
+   applies the squash itself, so feeding it a screen angle made every car
+   point slightly wrong: that is what looked wonky on the straights. */
 function drawCarSprite(x, y, ang, colourIdx, modelKey, size) {
   if (!CAR_ATLAS) buildCarAtlas();
   const set = CAR_ATLAS[modelKey] || CAR_ATLAS.stock;

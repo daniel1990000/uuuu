@@ -665,7 +665,7 @@ function drawSceneItem(it, tk, HALF) {
       break;
     }
     case "parked":
-      drawCarSprite(g.x, g.y, W2Sang(p.h + Math.PI / 2), (it.i * 3) % 8, "stock", sc * 4.2);
+      drawCarSprite(g.x, g.y, p.h + VIEW.rot + Math.PI / 2, (it.i * 3) % 8, "stock", sc * 4.2);
       break;
     case "light": {
       /* floodlight pylon */
@@ -756,7 +756,7 @@ function camFollow(p) {
   let dl = wantRot - VIEW.rot;
   while (dl > Math.PI) dl -= 2 * Math.PI;
   while (dl < -Math.PI) dl += 2 * Math.PI;
-  VIEW.rot += dl * 0.10;
+  VIEW.rot += Math.abs(dl) < 0.004 ? dl : dl * 0.18;
 }
 function W2S(p) {
   const v = VIEW;
@@ -789,7 +789,7 @@ function drawRace() {
   const me = R.field[0];
   camFollow(sampleTrack(tk, me.s + 16));
 
-  const dirt = track.surf === "dirt", road = track.surf === "road";
+  const dirt = false, road = track.surf === "road";
   const HALF = VIEW.HALF;
   if (!SCENE) SCENE = buildScenery(tk, track, HALF);
 
@@ -885,7 +885,7 @@ function drawRace() {
   const drawn = R.field.filter(c => !(c.dnf && c.done)).map(c => {
     const p = sampleTrack(tk, c.s);
     const w = W2S(offsetPoint(p, laneOffset(c.lane)));
-    return { c, w, ang: W2Sang(p.h) };
+    return { c, w, ang: p.h + VIEW.rot };
   }).filter(o => onScreen(o.w, 60));
   drawn.sort((a, b) => a.w.y - b.w.y);
   for (const o of drawn) {
