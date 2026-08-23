@@ -1,50 +1,56 @@
-# Getting a playable URL
+# Getting Stock Car Story onto a URL
 
-Three routes, fastest first.
+The game is plain HTML, CSS and JavaScript with no runtime dependencies and
+no build step at play time, so anything that can serve a static file can host
+it. Three routes, easiest first.
 
-## 1. Netlify Drop — 30 seconds, no account needed
+## 1. Netlify Drop — no account, about ten seconds
 
-`npm run build` produces **`dist/index.html`**: the entire game in one file.
+    node tools/build.js          # writes dist/index.html
 
-Open <https://app.netlify.com/drop> and drag that single file onto the page.
-You get a public URL immediately. Create a free Netlify account if you want to
-keep the URL permanently and give it a nicer name.
+Open <https://app.netlify.com/drop> and drag `dist/index.html` onto the page.
+You get a live URL immediately. It is the entire game in one 228 KB file, so
+there is nothing else to upload.
 
-The same file works on **itch.io** (upload as an HTML game, mark
-`index.html` as the main file) and on any static host.
+The URL Netlify hands you is random (`fluffy-tapioca-12ab34.netlify.app`).
+Claim it with a free account if you want to rename it or keep it permanently —
+unclaimed drops expire.
 
-## 2. GitHub Pages — automatic on every push
+## 2. GitHub Pages — one click, then automatic forever
 
-`.github/workflows/deploy-stock-car-story.yml` is already in the repo. Enable it once:
+`.github/workflows/deploy-stock-car-story.yml` already builds and publishes on
+every push to the development branch. It needs Pages switched on once, because
+a workflow cannot enable Pages for its own repository:
 
-1. GitHub → your repo → **Settings** → **Pages**
-2. Under **Source**, choose **GitHub Actions**
-3. Push to `claude/nascar-story-game-w36ol1` (or run the workflow manually
-   from the Actions tab)
+1. <https://github.com/daniel1990000/uuuu/settings/pages>
+2. **Source** → **GitHub Actions**
+3. Re-run the workflow from the Actions tab, or push anything
 
-The site lands at:
+The site then lives at:
 
-```
-https://daniel1990000.github.io/uuuu/
-```
+- <https://daniel1990000.github.io/uuuu/> — the normal multi-file build
+- <https://daniel1990000.github.io/uuuu/single/> — the one-file build
 
-That URL serves the full PWA — installable to a phone home screen, works
-offline. A one-file copy is also published at `/single/`.
+Until step 2 is done the deploy job fails with `HttpError: Not Found`, which is
+Pages saying it has not been turned on rather than anything wrong with the build.
 
-## 3. Netlify from the repo — automatic, custom domain
+## 3. Netlify from the repository — automatic, custom domain
 
-1. Netlify → **Add new site** → **Import an existing project** → GitHub
-2. Pick the repo, set:
-   - **Base directory**: `stock-car-story`
-   - **Build command**: `node tools/build.js`
-   - **Publish directory**: `stock-car-story/www`
-3. Deploy
+Connect the repo at <https://app.netlify.com/start>, then set:
 
-Every push then rebuilds automatically, and you can attach a custom domain.
+- **Base directory:** `stock-car-story`
+- **Build command:** `node tools/build.js`
+- **Publish directory:** `www`
 
----
+Netlify rebuilds on every push and will attach a custom domain.
 
-## Before you share it widely
+## Notes
 
-Bump `CACHE` in `www/sw.js` whenever you deploy an update, or returning
-players keep getting the cached old build.
+- **Service worker.** `www/sw.js` caches the game for offline play. Bump
+  `CACHE` on every release or returning players keep the old scripts. It is at
+  `scs-v3` now.
+- **Paths are all relative**, so hosting under a subpath like `/uuuu/` works
+  without changes.
+- **HTTPS is required** for the service worker and for install-to-home-screen.
+  All three routes above give you that.
+- **Android and iOS** builds go through Capacitor instead — see `RELEASE.md`.
