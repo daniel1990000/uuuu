@@ -4,6 +4,29 @@ The game is plain HTML, CSS and JavaScript with no runtime dependencies and
 no build step at play time, so anything that can serve a static file can host
 it. Three routes, easiest first.
 
+## 0. Already live — githack, no setup at all
+
+The repository is public, so the committed build at `docs/index.html`
+already has a working public URL. Nothing to enable, no account:
+
+- <https://raw.githack.com/daniel1990000/uuuu/claude/nascar-story-game-w36ol1/docs/index.html>
+  — follows the branch, so it updates on every push.
+- <https://rawcdn.githack.com/daniel1990000/uuuu/6d25a65551464f7b4277aecb644af51212fa1ad4/docs/index.html>
+  — pinned to a commit and CDN-cached, so it never changes under you.
+
+githack serves raw GitHub files with a real `text/html` content type,
+which is the only reason this works where `raw.githubusercontent.com`
+does not (that serves everything as `text/plain`).
+
+Treat it as a share-and-playtest link rather than a shipping host: it is
+a free third-party CDN with rate limits and no uptime promise. For a
+release, use one of the routes below.
+
+Refresh it with:
+
+    cd stock-car-story && node tools/build.js && cp dist/index.html ../docs/index.html
+    git add -f ../docs/index.html && git commit && git push
+
 ## 1. Netlify Drop — no account, about ten seconds
 
     node tools/build.js          # writes dist/index.html
