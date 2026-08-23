@@ -237,6 +237,22 @@ rounded pill buttons; white dialogs with red title bars.
 tool chests, oil drums, sponsor banner, transporter outside, and chibi staff
 who wander the floor while status bubbles float above.
 
+**Track furniture** is built once per race in (distance-along-lap, offset)
+space and drawn back-to-front, which is what fills the infield: a pit complex
+running the frontstretch — sponsor-panelled pit wall, lane with its painted
+line, team-coloured stalls, crew over the wall with tyres and toolboxes —
+then a garage bay row, a scoring pylon, media and care centres, motorhomes,
+a lake, and trees. Outside the fence there is a car park and floodlight
+pylons. The grandstand is a structure rather than a texture: concrete
+substructure, raked deck, step nosings, a front railing, aisles that split it
+into sections with entrance tunnels at their base, and a roof on columns over
+the main straight.
+
+The track surface carries tonal banding across its width — polished groove
+where the cars run, fresher asphalt at the edges — plus expansion seams,
+occasional resurfaced patches, white edge lines both sides and a yellow apron
+warning line. The infield grass is mown in bands that follow the track.
+
 **Race scene**: the whole speedway from a blimp view — the track ribbon with a
 worn groove and banking shading, SAFER-striped outer wall, tiered grandstands
 with a pixel crowd on the frontstretch and backstretch, pit road with stalls

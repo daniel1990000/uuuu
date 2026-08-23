@@ -508,6 +508,200 @@ function drawGarage() {
   if (G.offers.length && G.sponsors.length < 2) bubble("Sponsor offer!", "#c47b00");
 }
 
+/* ============================================================
+   TRACK FURNITURE
+   Built once when a race starts, in (distance-along-lap, offset)
+   space, then drawn back-to-front.  This is what turns an empty
+   green field into an actual speedway infield.
+   ============================================================ */
+let SCENE = null;
+function buildScenery(tk, track, HALF) {
+  const S = [];
+  const runs = straightRuns(tk);
+  const fs = runs.find(r2 => r2.start <= tk.sfDist && r2.end >= tk.sfDist) || runs[0];
+  const bs = runs.find(r2 => r2 !== fs) || fs;
+  const fl = fs.end - fs.start, bl = bs.end - bs.start;
+
+  /* --- pit road along the frontstretch --- */
+  const stalls = clamp(Math.floor(fl / 26), 6, 18);
+  for (let i = 0; i < stalls; i++) {
+    const d = fs.start + fl * 0.10 + (i + 0.5) * (fl * 0.80 / stalls);
+    S.push({ t: "pitbox", d, off: HALF + 8.5, i });
+  }
+  /* haulers backed up behind the pit boxes */
+  const haulers = clamp(Math.floor(fl / 55), 3, 9);
+  for (let i = 0; i < haulers; i++)
+    S.push({ t: "hauler", d: fs.start + fl * 0.12 + (i + 0.5) * (fl * 0.76 / haulers), off: HALF + 31, i });
+
+  /* --- infield garage row --- */
+  const bays = clamp(Math.floor(fl / 34), 4, 12);
+  for (let i = 0; i < bays; i++)
+    S.push({ t: "bay", d: fs.start + fl * 0.16 + (i + 0.5) * (fl * 0.70 / bays), off: HALF + 21, i });
+
+  /* --- infield buildings --- */
+  S.push({ t: "building", d: fs.start + fl * 0.5, off: HALF + 46, w: 26, l: 18, h: 15, col: "#e6ebf2", roof: "#c0392b", label: "MEDIA" });
+  S.push({ t: "building", d: bs.start + bl * 0.30, off: HALF + 34, w: 18, l: 13, h: 11, col: "#dfe6ef", roof: "#2255cc", label: "CARE" });
+  S.push({ t: "tower", d: fs.start + fl * 0.62, off: HALF + 15.5 });
+
+  /* --- lake and greenery in the middle --- */
+  S.push({ t: "lake", d: bs.start + bl * 0.62, off: HALF + 40, rx: 30, ry: 13 });
+  for (let i = 0; i < 14; i++) {
+    const d = (i / 14) * tk.len;
+    S.push({ t: "tree", d, off: HALF + 26 + ((i * 37) % 30), kind: track.surf === "ss" ? "palm" : "pine" });
+  }
+  /* motorhomes parked up in the infield */
+  for (let i = 0; i < 5; i++)
+    S.push({ t: "rv", d: bs.start + bl * (0.18 + i * 0.15), off: HALF + 30, i });
+
+  /* --- a car park outside the main grandstand --- */
+  for (let i = 0; i < 26; i++) {
+    const d = fs.start - 30 + (i % 13) * (fl / 12);
+    S.push({ t: "parked", d, off: -HALF - 34 - Math.floor(i / 13) * 10, i });
+  }
+
+  /* --- perimeter fence and floodlights outside the stands --- */
+  for (let i = 0; i < 22; i++)
+    S.push({ t: "light", d: (i / 22) * tk.len, off: -HALF - 30 });
+
+  /* --- marshal posts around the outside, on the corners --- */
+  for (let d = 0; d < tk.len; d += 90) {
+    const p = sampleTrack(tk, d);
+    if (p.c > 0.3) S.push({ t: "post", d, off: -HALF - 9 });
+  }
+  return { S, fs, bs };
+}
+
+/* draw one scenery item; everything is placed on the ground plane */
+function drawSceneItem(it, tk, HALF) {
+  const p = sampleTrack(tk, it.d);
+  const g = W2S(offsetPoint(p, it.off));
+  if (!onScreen(g, 120)) return;
+  const u = PX / 2, sc = VIEW.sc;
+  const box = (w, l, h, top, side, dark) => {
+    const cor = boxCorners(p, it.off, l, w).map(W2S);
+    const H = h * sc * 0.5;
+    const fs2 = [];
+    for (let i = 0; i < 4; i++) {
+      const a = cor[i], b = cor[(i + 1) % 4];
+      fs2.push({ a, b, my: (a.y + b.y) / 2 });
+    }
+    fs2.sort((x, y2) => x.my - y2.my);
+    for (const f of fs2) face(f.a, f.b, H, f.my > (cor[0].y + cor[2].y) / 2 ? dark : side);
+    quadS(lift(cor[0], H), lift(cor[1], H), lift(cor[2], H), lift(cor[3], H), top);
+    return { cor, H };
+  };
+
+  switch (it.t) {
+    case "pitbox": {
+      /* a painted stall in the team's colour, boxed in white, with the
+         crew and their gear waiting over the wall */
+      const col = it.i === 0 ? "#e8332a" : TEAMC[(it.i * 3) % 8];
+      const cor = boxCorners(p, it.off, 11, 6.5).map(W2S);
+      quadS(cor[0], cor[1], cor[2], cor[3], shade(col, -0.15));
+      cx.strokeStyle = "#f2f5fa"; cx.lineWidth = 1.6 * u;
+      cx.beginPath();
+      cx.moveTo(cor[0].x, cor[0].y);
+      for (let i = 1; i < 4; i++) cx.lineTo(cor[i].x, cor[i].y);
+      cx.closePath(); cx.stroke();
+      if (sc > 2) {
+        const eq = W2S(offsetPoint(p, it.off + 4.5));
+        tyreStack(eq.x - 4 * PX, eq.y, 2);
+        drawProp(PROP_TOOLBOX, eq.x + 7 * PX, eq.y - 5 * PX);
+        chibi(g.x - 6 * PX, g.y - 15 * PX, it.i, "crew", "left", (frame >> 4) % 2);
+        chibi(g.x + 3 * PX, g.y - 13 * PX, it.i + 3, "crew", "left", ((frame >> 4) + 1) % 2);
+      }
+      break;
+    }
+    case "hauler": {
+      const b2 = box(9, 24, 8, "#e9eef5", "#cfd7e3", "#aab4c4");
+      /* a coloured band and a cab */
+      const mid = { x: (b2.cor[0].x + b2.cor[3].x) / 2, y: (b2.cor[0].y + b2.cor[3].y) / 2 };
+      px(mid.x - 9 * u, mid.y - b2.H * 0.6, 18 * u, 3 * u, TEAMC[it.i % 8]);
+      break;
+    }
+    case "bay": {
+      /* garage stall with a roller door */
+      const b2 = box(10, 13, 11, "#c9d0da", "#aeb6c2", "#8f97a3");
+      const front = W2S(offsetPoint(p, it.off - 5));
+      px(front.x - 5 * u, front.y - b2.H * 0.85, 10 * u, b2.H * 0.7, "#6b7480");
+      for (let k = 0; k < 3; k++)
+        px(front.x - 5 * u, front.y - b2.H * 0.8 + k * b2.H * 0.2, 10 * u, u, "#8a93a0");
+      break;
+    }
+    case "building": {
+      const b2 = box(it.w, it.l, it.h, it.col, shade(it.col, -0.14), shade(it.col, -0.3));
+      const topMid = {
+        x: (b2.cor[0].x + b2.cor[1].x + b2.cor[2].x + b2.cor[3].x) / 4,
+        y: (b2.cor[0].y + b2.cor[1].y + b2.cor[2].y + b2.cor[3].y) / 4 - b2.H,
+      };
+      /* roof band + a row of windows */
+      quadS(lift(b2.cor[0], b2.H + 2 * u), lift(b2.cor[1], b2.H + 2 * u),
+            lift(b2.cor[2], b2.H + 2 * u), lift(b2.cor[3], b2.H + 2 * u), it.roof);
+      if (sc > 2) txt(it.label, topMid.x, topMid.y + 3 * u, "#48506a", 6, "center");
+      break;
+    }
+    case "tower": {
+      /* the scoring pylon */
+      const b2 = box(6, 6, 30, "#3a4256", "#2b3244", "#20263a");
+      const t2 = { x: (b2.cor[0].x + b2.cor[2].x) / 2, y: (b2.cor[0].y + b2.cor[2].y) / 2 };
+      for (let k = 0; k < 5; k++) {
+        px(t2.x - 4 * u, t2.y - b2.H + 3 * u + k * 5 * u, 8 * u, 4 * u, "#0f1424");
+        if (sc > 2) txt(String(k + 1), t2.x, t2.y - b2.H + 6.5 * u + k * 5 * u, "#ffd23f", 5, "center");
+      }
+      break;
+    }
+    case "lake": {
+      const a = W2S(offsetPoint(p, it.off - it.ry));
+      const b3 = W2S(offsetPoint(p, it.off + it.ry));
+      const cxm = (a.x + b3.x) / 2, cym = (a.y + b3.y) / 2;
+      cx.fillStyle = "#2f86c4";
+      cx.beginPath(); cx.ellipse(cxm, cym, it.rx * sc * 0.5, it.ry * sc * 0.45, 0, 0, 7); cx.fill();
+      cx.fillStyle = "#57b0e4";
+      cx.beginPath(); cx.ellipse(cxm, cym - 2 * u, it.rx * sc * 0.36, it.ry * sc * 0.28, 0, 0, 7); cx.fill();
+      break;
+    }
+    case "rv": {
+      box(8, 16, 9, "#f2f4f8", "#d8dee8", "#b6bfcd");
+      break;
+    }
+    case "parked":
+      drawCarSprite(g.x, g.y, W2Sang(p.h + Math.PI / 2), (it.i * 3) % 8, "stock", sc * 4.2);
+      break;
+    case "light": {
+      /* floodlight pylon */
+      const h = 34 * u;
+      px(g.x - u, g.y - h, 2 * u, h, "#8d95a2");
+      px(g.x - 6 * u, g.y - h - 4 * u, 12 * u, 4 * u, "#5f6874");
+      for (let k = 0; k < 3; k++) px(g.x - 5 * u + k * 4 * u, g.y - h - 3 * u, 3 * u, 2 * u, "#ffeaa0");
+      break;
+    }
+    case "tree": tree(g.x, g.y, 1, it.kind); break;
+    case "post": {
+      /* a marshal on a proper platform, not standing in the grass */
+      px(g.x - 5 * u, g.y - 12 * u, 11 * u, 12 * u, "#c8ced8");
+      px(g.x - 6 * u, g.y - 15 * u, 13 * u, 4 * u, "#e8332a");
+      if (sc > 2) chibi(g.x - 4 * PX, g.y - 15 * u - 14 * PX, (it.d | 0) % 8, "marshal", "down", 0);
+      break;
+    }
+  }
+}
+function drawScenery(tk, HALF, d0, d1) {
+  if (!SCENE) return;
+  const vis = [];
+  for (const it of SCENE.S) {
+    /* wrap the item's distance into the visible window */
+    let d = it.d;
+    while (d < d0 - tk.len / 2) d += tk.len;
+    while (d > d0 + tk.len / 2) d -= tk.len;
+    if (d < d0 - 60 || d > d1 + 60) continue;
+    const g = W2S(offsetPoint(sampleTrack(tk, d), it.off));
+    if (!onScreen(g, 130)) continue;
+    vis.push({ it: Object.assign({}, it, { d }), y: g.y });
+  }
+  vis.sort((a, b) => a.y - b.y);
+  for (const v of vis) drawSceneItem(v.it, tk, HALF);
+}
+
 /* A labelled, tappable spot in the shop.  The label is what turns a
    pretty scene into something a player can actually operate.        */
 function tapLabel(x, y, text, action, w, h) {
@@ -537,7 +731,7 @@ let VIEW = null;
 const TARGET_ANG = -1.12;
 const SQ = 0.56;
 /* the car sits low and right, leaving the upper-left for wall + crowd */
-const ANCH_X = 0.56, ANCH_Y = 0.66;
+const ANCH_X = 0.50, ANCH_Y = 0.62;
 
 const CAR_WORLD = 5.6;                 // a stock car is 5.6 world units long
 function setupView(tk) {
@@ -545,7 +739,7 @@ function setupView(tk) {
      otherwise a 2.5-mile superspeedway renders the cars as specks.  The
      racing surface then gets a fixed world width, so it looks the same on
      every track and stays correctly thin relative to a long lap.        */
-  const carPx = clamp(CW * 0.115, 34, 100);
+  const carPx = clamp(CW * 0.102, 32, 92);
   const sc = carPx / CAR_WORLD;
   const HALF = (CW * 0.27) / sc;
   VIEW = { sc, HALF, cx: 0, cy: 0, rot: 0, ready: false };
@@ -597,12 +791,25 @@ function drawRace() {
 
   const dirt = track.surf === "dirt", road = track.surf === "road";
   const HALF = VIEW.HALF;
+  if (!SCENE) SCENE = buildScenery(tk, track, HALF);
 
   dith(0, 0, CW, CH, dirt ? "#6fae46" : "#61ab41", dirt ? "#63a03e" : "#559a39", 6);
 
   const step = Math.max(5, 34 / VIEW.sc);
   const span = (CH / (VIEW.sc * SQ)) * 1.5 + 220;
   const d0 = me.s - span * 0.30, d1 = me.s + span * 0.85;
+
+  /* --- infield grass, mown in bands that follow the track --- */
+  if (!dirt) {
+    for (let d = Math.floor(d0 / 34) * 34; d <= d1; d += 34) {
+      const a1 = W2S(offsetPoint(sampleTrack(tk, d), HALF + 1));
+      const a2 = W2S(offsetPoint(sampleTrack(tk, d), HALF + 110));
+      const b1 = W2S(offsetPoint(sampleTrack(tk, d + 17), HALF + 1));
+      const b2 = W2S(offsetPoint(sampleTrack(tk, d + 17), HALF + 110));
+      if (!onScreen(a1, 200) && !onScreen(b1, 200)) continue;
+      quadS(a1, b1, b2, a2, "rgba(255,255,255,.055)");
+    }
+  }
 
   /* track surface */
   const outer = [], inner = [];
@@ -619,44 +826,56 @@ function drawRace() {
     cx.closePath();
     cx.fillStyle = dirt ? "#96693a" : (road ? "#4b5058" : "#5c616a");
     cx.fill();
-    cx.strokeStyle = dirt ? "rgba(70,45,22,.34)" : "rgba(22,22,28,.30)";
-    cx.lineWidth = Math.max(2, HALF * VIEW.sc * 0.5);
+    cx.save(); cx.clip();
+
+    /* tonal banding across the width — fresh asphalt at the edges,
+       a polished groove where the cars run */
+    const bandStroke = (off, w, col) => {
+      cx.strokeStyle = col; cx.lineWidth = w;
+      cx.beginPath();
+      for (let i = 0, d = d0; d <= d1; d += step, i++) {
+        const q = W2S(offsetPoint(sampleTrack(tk, d), off));
+        if (i === 0) cx.moveTo(q.x, q.y); else cx.lineTo(q.x, q.y);
+      }
+      cx.stroke();
+    };
+    bandStroke(HALF * 0.62, HALF * VIEW.sc * 0.34, dirt ? "rgba(120,86,44,.30)" : "rgba(255,255,255,.045)");
+    bandStroke(HALF * 0.22, HALF * VIEW.sc * 0.52, dirt ? "rgba(66,42,20,.34)" : "rgba(20,20,26,.30)");
+    bandStroke(-HALF * 0.05, HALF * VIEW.sc * 0.26, dirt ? "rgba(56,34,16,.26)" : "rgba(14,14,20,.22)");
+
+    /* expansion seams, and the odd patch of newer surface */
+    for (let d = Math.floor(d0 / 46) * 46; d <= d1; d += 46) {
+      const p2 = sampleTrack(tk, d);
+      const a = W2S(offsetPoint(p2, -HALF)), b = W2S(offsetPoint(p2, HALF));
+      cx.strokeStyle = dirt ? "rgba(126,92,50,.45)" : "rgba(255,255,255,.07)";
+      cx.lineWidth = 1 * (PX / 2);
+      cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+    }
+    if (!dirt) {
+      for (let d = Math.floor(d0 / 230) * 230; d <= d1; d += 230) {
+        const c1 = boxCorners(sampleTrack(tk, d + 40), HALF * 0.3, 46, HALF * 1.1).map(W2S);
+        quadS(c1[0], c1[1], c1[2], c1[3], "rgba(30,32,40,.22)");
+      }
+    }
+    cx.restore();
+  }
+
+  /* apron and edge lines */
+  const line = (off, w, col) => {
+    cx.strokeStyle = col; cx.lineWidth = w;
     cx.beginPath();
     for (let i = 0, d = d0; d <= d1; d += step, i++) {
-      const q = W2S(offsetPoint(sampleTrack(tk, d), HALF * 0.30));
+      const q = W2S(offsetPoint(sampleTrack(tk, d), off));
       if (i === 0) cx.moveTo(q.x, q.y); else cx.lineTo(q.x, q.y);
     }
     cx.stroke();
-    cx.strokeStyle = dirt ? "rgba(120,88,48,.5)" : "rgba(255,255,255,.06)";
-    cx.lineWidth = 1;
-    for (let d = Math.floor(d0 / 55) * 55; d <= d1; d += 55) {
-      const p = sampleTrack(tk, d);
-      const a = W2S(offsetPoint(p, -HALF)), b = W2S(offsetPoint(p, HALF));
-      cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
-    }
-  }
-
-  /* apron line */
-  cx.strokeStyle = dirt ? "#d8c49a" : "#eef2f8"; cx.lineWidth = 1.6;
-  cx.beginPath();
-  for (let i = 0, d = d0; d <= d1; d += step, i++) {
-    const q = W2S(offsetPoint(sampleTrack(tk, d), HALF - 0.6));
-    if (i === 0) cx.moveTo(q.x, q.y); else cx.lineTo(q.x, q.y);
-  }
-  cx.stroke();
-
-  /* red-and-white kerbing on the inside of the corners */
-  for (let d = Math.floor(d0 / 9) * 9; d <= d1; d += 9) {
-    const p = sampleTrack(tk, d);
-    if (p.c < 0.25) continue;
-    const p2 = sampleTrack(tk, d + 8.6);
-    const a1 = W2S(offsetPoint(p, HALF - 0.4)), a2 = W2S(offsetPoint(p, HALF - 2.6));
-    const b1 = W2S(offsetPoint(p2, HALF - 0.4)), b2 = W2S(offsetPoint(p2, HALF - 2.6));
-    if (!onScreen(a1, 40)) continue;
-    quadS(a1, b1, b2, a2, Math.abs((d / 6) | 0) % 2 ? "#e8332a" : "#f4f6fa");
-  }
+  };
+  line(HALF - 0.7, 2 * (PX / 2), dirt ? "#d8c49a" : "#eef2f8");     // inside edge
+  line(-HALF + 0.7, 2 * (PX / 2), dirt ? "#d8c49a" : "#eef2f8");    // outside edge
+  if (!dirt) line(HALF + 2.6, 1.6 * (PX / 2), "#f0c53c");            // apron warning line
 
   drawPitRoad(tk, HALF);
+  drawScenery(tk, HALF, d0, d1);
   drawStartFinish(tk, HALF);
   drawInnerWall(tk, HALF, d0, d1, step);
   drawOuterFurniture(tk, HALF, d0, d1, step);
@@ -750,47 +969,77 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   const isMain = d => fs && wrap(d) >= fs.start && wrap(d) <= fs.end;
   const onStraight = d => runs.slice(0, 3).some(r => wrap(d) >= r.start && wrap(d) <= r.end);
 
-  /* Grandstand: one solid raked deck per track segment, then the step
-     nosings and the people sitting on them.  Drawn far-to-near.      */
+  /* Grandstand: a raked deck with a front railing, aisles that split it
+     into sections, entrance tunnels at the base and a roof on columns. */
   const standStep = Math.max(8, step * 3);
   for (let d = Math.floor(d0 / standStep) * standStep; d <= d1; d += standStep) {
     if (!onStraight(d)) continue;
     const p = sampleTrack(tk, d);
     const p2 = sampleTrack(tk, d + standStep * 1.02);
-    const rows = isMain(d) ? 6 : 4;
-    const depth = rows * 2.1;
-    const totalH = 7 + rows * 3.4;
+    const main = isMain(d);
+    const rows = main ? 7 : 5;
+    const depth = rows * 1.95;
+    const totalH = 8 + rows * 3.4;
     const fA = W2S(offsetPoint(p, -HALF - 9)), fB = W2S(offsetPoint(p2, -HALF - 9));
-    if (!onScreen(fA, 130) && !onScreen(fB, 130)) continue;
+    if (!onScreen(fA, 150) && !onScreen(fB, 150)) continue;
     const bA = lift(W2S(offsetPoint(p, -HALF - 9 - depth)), totalH);
     const bB = lift(W2S(offsetPoint(p2, -HALF - 9 - depth)), totalH);
-    /* the raked concrete deck */
-    quadS(fA, fB, bB, bA, "#9aa2ab");
-    /* step nosings + spectators, front row first */
+    const uu = PX / 2;
+
+    /* the concrete substructure below the seating */
+    face(fA, fB, 7 * uu, "#7f8792");
+    /* the raked deck */
+    quadS(lift(fA, 7 * uu), lift(fB, 7 * uu), bB, bA, "#9aa2ab");
+
+    /* an aisle every third segment splits the stand into sections */
+    const aisle = Math.abs(Math.round(d / standStep)) % 4 === 0;
+    if (aisle) {
+      const mA = { x: (fA.x + fB.x) / 2, y: (fA.y + fB.y) / 2 };
+      const mB = { x: (bA.x + bB.x) / 2, y: (bA.y + bB.y) / 2 };
+      cx.strokeStyle = "#c3cad4"; cx.lineWidth = 3 * uu;
+      cx.beginPath(); cx.moveTo(mA.x, mA.y - 7 * uu); cx.lineTo(mB.x, mB.y); cx.stroke();
+    }
+
     for (let rw = 0; rw < rows; rw++) {
       const t = (rw + 0.5) / rows;
       const sA = { x: fA.x + (bA.x - fA.x) * t, y: fA.y + (bA.y - fA.y) * t };
       const sB = { x: fB.x + (bB.x - fB.x) * t, y: fB.y + (bB.y - fB.y) * t };
-      quadS(sA, sB, lift(sB, 2), lift(sA, 2), rw % 2 ? "#b0b8c2" : "#a6aeb8");
+      quadS(sA, sB, lift(sB, 2 * uu), lift(sA, 2 * uu), rw % 2 ? "#b0b8c2" : "#a6aeb8");
       const seed = Math.abs((d * 5) | 0) + rw * 23;
-      if (seed % 10 === 0) continue;
-      /* fill the segment with as many people as its screen width allows */
       const segW = Math.hypot(sB.x - sA.x, sB.y - sA.y);
       const n = clamp(Math.round(segW / (6 * PX)), 1, 5);
       for (let k = 0; k < n; k++) {
+        if (aisle && k === Math.floor(n / 2)) continue;      // leave the aisle clear
         const t2 = (k + 0.35) / n;
-        const sx = sA.x + (sB.x - sA.x) * t2 - 2 * PX;
-        const sy = sA.y + (sB.y - sA.y) * t2 - 11 * PX;
         const sd2 = seed + k * 13;
-        if (sd2 % 11 === 0) continue;
-        spectator(sx, sy, sd2, ((frame >> 4) + sd2) % 4 === 0);
+        if (sd2 % 12 === 0) continue;
+        spectator(sA.x + (sB.x - sA.x) * t2 - 2 * PX,
+                  sA.y + (sB.y - sA.y) * t2 - 11 * PX, sd2, ((frame >> 4) + sd2) % 4 === 0);
       }
     }
-    /* roof on the main stand, on posts */
-    if (isMain(d) && VIEW.sc > 2) {
-      const rh = 24;
-      quadS(lift(bA, rh), lift(bB, rh), lift(bB, rh + 3), lift(bA, rh + 3), "#6d747d");
-      px(bA.x, bA.y - rh, 1, rh, "#8b929c");
+
+    /* front railing so the crowd is not spilling onto the track */
+    cx.strokeStyle = "#dfe5ee"; cx.lineWidth = 1.4 * uu;
+    cx.beginPath();
+    cx.moveTo(fA.x, fA.y - 10 * uu); cx.lineTo(fB.x, fB.y - 10 * uu); cx.stroke();
+    for (let k = 0; k <= 2; k++) {
+      const t2 = k / 2, rx = fA.x + (fB.x - fA.x) * t2, ry = fA.y + (fB.y - fA.y) * t2;
+      px(rx, ry - 10 * uu, uu, 10 * uu, "#cbd2dc");
+    }
+    /* entrance tunnel at the base of every aisle */
+    if (aisle) {
+      const mA = { x: (fA.x + fB.x) / 2, y: (fA.y + fB.y) / 2 };
+      px(mA.x - 4 * uu, mA.y - 6 * uu, 8 * uu, 6 * uu, "#2f3646");
+      px(mA.x - 5 * uu, mA.y - 8 * uu, 10 * uu, 2 * uu, "#6d747d");
+    }
+    /* roof on columns over the main stand */
+    if (main) {
+      const rh = 26 * uu;
+      quadS(lift(bA, rh), lift(bB, rh), lift(bB, rh + 3 * uu), lift(bA, rh + 3 * uu), "#5f6874");
+      quadS(lift(bA, rh + 3 * uu), lift(bB, rh + 3 * uu),
+            lift({ x: bB.x + 6 * uu, y: bB.y + 4 * uu }, rh + 3 * uu),
+            lift({ x: bA.x + 6 * uu, y: bA.y + 4 * uu }, rh + 3 * uu), "#6d7682");
+      px(bA.x, bA.y - rh, 1.6 * uu, rh, "#87909c");
     }
   }
 
@@ -858,26 +1107,51 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   }
 }
 
+/* The pit complex: an inner wall, the lane itself, painted boxes and the
+   crew working over the wall.  It runs the length of the frontstretch. */
 function drawPitRoad(tk, HALF) {
-  const runs = straightRuns(tk);
-  const fs = runs.find(r => r.start <= tk.sfDist && r.end >= tk.sfDist) || runs[0];
-  if (!fs) return;
-  const step = Math.max(4, (fs.end - fs.start) / 26);
-  cx.strokeStyle = "#767f8b"; cx.lineWidth = Math.max(3, 6 * VIEW.sc * 0.55);
-  cx.beginPath();
-  let started = false;
+  if (!SCENE) return;
+  const fs = SCENE.fs;
+  const u = PX / 2, sc = VIEW.sc;
+  const step = Math.max(4, (fs.end - fs.start) / 30);
+
+  /* lane surface, a shade lighter than the track */
+  const laneOut = [], laneIn = [];
   for (let d = fs.start; d <= fs.end; d += step) {
-    const q = W2S(offsetPoint(sampleTrack(tk, d), HALF + 7));
-    if (!started) { cx.moveTo(q.x, q.y); started = true; } else cx.lineTo(q.x, q.y);
+    const p = sampleTrack(tk, d);
+    laneOut.push(W2S(offsetPoint(p, HALF + 2.2)));
+    laneIn.push(W2S(offsetPoint(p, HALF + 14)));
   }
-  if (started) cx.stroke();
-  let i = 0;
-  for (let d = fs.start + step; d < fs.end - step; d += step * 1.6, i++) {
-    const b = W2S(offsetPoint(sampleTrack(tk, d), HALF + 12));
-    if (!onScreen(b, 40)) continue;
-    px(b.x - 4 * PX, b.y - 2 * PX, 9 * PX, 5 * PX, i === 0 ? "#e8332a" : "#c9cfd9");
-    px(b.x - 4 * PX, b.y - 2 * PX, 9 * PX, PX, "#8f97a3");
-    chibi(b.x + 5 * PX, b.y - 14 * PX, i, "crew", "left", (frame >> 4) % 2);
+  if (laneOut.length > 1) {
+    cx.beginPath();
+    cx.moveTo(laneOut[0].x, laneOut[0].y);
+    for (const q of laneOut) cx.lineTo(q.x, q.y);
+    for (let i = laneIn.length - 1; i >= 0; i--) cx.lineTo(laneIn[i].x, laneIn[i].y);
+    cx.closePath();
+    cx.fillStyle = "#6e7783"; cx.fill();
+    /* the painted lane line down the middle */
+    cx.strokeStyle = "#f0f3f8"; cx.lineWidth = 1.6 * u;
+    cx.beginPath();
+    for (let i = 0, d = fs.start; d <= fs.end; d += step, i++) {
+      const q = W2S(offsetPoint(sampleTrack(tk, d), HALF + 5.2));
+      if (i === 0) cx.moveTo(q.x, q.y); else cx.lineTo(q.x, q.y);
+    }
+    cx.stroke();
+  }
+
+  /* the pit wall between lane and track, with sponsor panels on it */
+  const wallH = Math.max(3, sc * 1.1);
+  const AD2 = ["#e8332a", "#ffd23f", "#2255cc", "#3fae4a", "#ffffff"];
+  const wsegs = [];
+  for (let d = fs.start; d <= fs.end; d += step) wsegs.push(W2S(offsetPoint(sampleTrack(tk, d), HALF + 1.6)));
+  for (let i = 0; i < wsegs.length - 1; i++) {
+    const a = wsegs[i], b = wsegs[i + 1];
+    if (!onScreen(a, 80) && !onScreen(b, 80)) continue;
+    cx.strokeStyle = AD2[i % 5]; cx.lineWidth = wallH;
+    cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+    cx.strokeStyle = "#ffffff"; cx.lineWidth = wallH * 0.3;
+    cx.beginPath();
+    cx.moveTo(a.x, a.y - wallH * 0.5); cx.lineTo(b.x, b.y - wallH * 0.5); cx.stroke();
   }
 }
 
@@ -982,4 +1256,4 @@ function straightRuns(tk) {
   tk._runs = runs;
   return runs;
 }
-function resetRaceView() { VIEW = null; }
+function resetRaceView() { VIEW = null; SCENE = null; }
