@@ -300,7 +300,8 @@ let HOTSPOTS = [];
 function drawGarage() {
   HOTSPOTS = [];
   const ROOM = 6;
-  dith(0, 0, CW, CH, "#79c34d", "#6cb545", 6);
+  cx.beginPath(); cx.rect(0, 0, CW, CH);
+  fillFlatTex("grass", PX, "#6cb545");
   /* fit the shop floor to the screen width */
   TW = Math.max(11, Math.floor((CW * 0.96) / (2 * ROOM)));
   TH = Math.max(6, Math.round(TW * 0.60));
@@ -308,7 +309,8 @@ function drawGarage() {
   ISO.oy = Math.round(CH * 0.30);
 
   /* yard behind the shop */
-  px(0, 0, CW, Math.round(CH * 0.17), "#8a9099");
+  cx.beginPath(); cx.rect(0, 0, CW, Math.round(CH * 0.17));
+  fillFlatTex("asphalt", PX, "#8a9099");
   for (let i = 0; i < CW; i += 26) px(i, Math.round(CH * 0.10), 14, 2, "#e6e9ee");
   const tx = Math.round(CW * 0.52), ty = Math.round(CH * 0.04);
   px(tx, ty, 46, 17, "#e9eef5"); px(tx - 13, ty + 5, 14, 12, "#c3ccd8");
@@ -317,27 +319,39 @@ function drawGarage() {
   px(tx - 10, ty + 16, 7, 4, "#20232c"); px(tx + 8, ty + 16, 7, 4, "#20232c"); px(tx + 33, ty + 16, 7, 4, "#20232c");
   tree(18, Math.round(CH * 0.16), 1); tree(CW - 18, Math.round(CH * 0.14), 1);
 
-  /* floor */
-  for (let gx = 0; gx < ROOM; gx++)
-    for (let gy = 0; gy < ROOM; gy++)
-      isoTile(gx, gy, (gx + gy) % 2 ? "#c98f52" : "#bd8449");
+  /* Floor: authored sealed concrete, mapped onto the iso diamond so the
+     bay markings and drain channel run with the room rather than being
+     a flat chequerboard of two browns. */
+  {
+    const o = iso(0, 0), ex = iso(ROOM, 0), ey = iso(0, ROOM);
+    cx.beginPath();
+    cx.moveTo(o.x, o.y); cx.lineTo(ex.x, ex.y);
+    cx.lineTo(ex.x + ey.x - o.x, ex.y + ey.y - o.y); cx.lineTo(ey.x, ey.y);
+    cx.closePath();
+    cx.save(); cx.clip();
+    /* one repeat across the whole floor: the tile already carries three
+       bay lines, and tiling it twice turned them into a grid */
+    fillQuadTex(o, ex, ey, "garageFloor", 1, 1);
+    cx.restore();
+  }
   cx.strokeStyle = "#e9a11b"; cx.lineWidth = 1.5;
   const c0 = iso(1.6, 1.6), c1 = iso(4.4, 1.6), c2 = iso(4.4, 4.4), c3 = iso(1.6, 4.4);
   cx.beginPath(); cx.moveTo(c0.x, c0.y); cx.lineTo(c1.x, c1.y); cx.lineTo(c2.x, c2.y); cx.lineTo(c3.x, c3.y); cx.closePath(); cx.stroke();
 
   /* walls */
   const WH = 42;
-  for (let gx = 0; gx < ROOM; gx++) {
-    const a = iso(gx, -0.5), b = iso(gx + 1, -0.5);
+  {
+    const a = iso(0, -0.5), b = iso(ROOM, -0.5), c = iso(-0.5, 0), e = iso(-0.5, ROOM);
+    const up = p2 => ({ x: p2.x, y: p2.y - WH });
+    /* back wall, then the darker side wall */
     cx.fillStyle = "#9aa2ab";
     cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y);
     cx.lineTo(b.x, b.y - WH); cx.lineTo(a.x, a.y - WH); cx.closePath(); cx.fill();
-  }
-  for (let gy = 0; gy < ROOM; gy++) {
-    const a = iso(-0.5, gy), b = iso(-0.5, gy + 1);
+    fillQuadTex(up(a), up(b), a, "garageWall", Math.max(2, Math.round(ROOM * 0.9)), 3, 0.95);
     cx.fillStyle = "#848c95";
-    cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y);
-    cx.lineTo(b.x, b.y - WH); cx.lineTo(a.x, a.y - WH); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.moveTo(c.x, c.y); cx.lineTo(e.x, e.y);
+    cx.lineTo(e.x, e.y - WH); cx.lineTo(c.x, c.y - WH); cx.closePath(); cx.fill();
+    fillQuadTex(up(c), up(e), c, "garageWall", Math.max(2, Math.round(ROOM * 0.9)), 3, 0.6);
   }
   /* corrugated sheeting + roof trim */
   cx.strokeStyle = "rgba(255,255,255,.13)"; cx.lineWidth = 1;

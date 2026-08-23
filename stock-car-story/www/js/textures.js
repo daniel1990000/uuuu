@@ -495,6 +495,19 @@ function fillWorldTex(key, texel, fallback, canvasOverride) {
   cx.imageSmoothingEnabled = sm;
 }
 
+/* Screen-space fill for the shop, which has no chase camera to lock to.
+   Same authored tiles, just laid straight onto the canvas. */
+function fillFlatTex(key, texel, fallback) {
+  const src = TEX[key];
+  const sm = cx.imageSmoothingEnabled;
+  cx.imageSmoothingEnabled = false;
+  let p = src ? cx.createPattern(src, "repeat") : null;
+  if (p) { try { p.setTransform(new DOMMatrix().scaleSelf(texel, texel)); } catch (e) { } }
+  cx.fillStyle = p || fallback;
+  cx.fill();
+  cx.imageSmoothingEnabled = sm;
+}
+
 /* ============================================================
    QUAD-MAPPED TEXTURES
    For anything that is not on the ground plane — a raked seating
