@@ -4,10 +4,14 @@ name: Deploy Stock Car Story
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
 # The site then lives at https://<owner>.github.io/<repo>/
 
+# No paths filter on purpose.  There was one, and it meant an empty commit
+# could not re-trigger a deploy — which is exactly what you reach for when
+# the code has not changed but the Pages setting has.  This is the only
+# workflow in the repository and the build takes seconds, so running it on
+# every push to the branch is worth more than the CI minutes it saves.
 on:
   push:
     branches: [claude/nascar-story-game-w36ol1]
-    paths: ["stock-car-story/**", ".github/workflows/deploy-stock-car-story.yml"]
   workflow_dispatch:
 
 permissions:
