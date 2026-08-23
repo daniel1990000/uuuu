@@ -140,12 +140,9 @@ function stockCar(sx, sy, ang, col, num, L) {
   const W = L * 0.50, H = L * 0.30;
   const cs = Math.cos(ang), sn = Math.sin(ang);
   const hl = L / 2, hw = W / 2;
-  const cor = [
-    { x: sx + cs * hl - sn * hw * SQ_F, y: sy + sn * hl * SQ_F + cs * hw * SQ_F },
-    { x: sx + cs * hl + sn * hw * SQ_F, y: sy + sn * hl * SQ_F - cs * hw * SQ_F },
-    { x: sx - cs * hl + sn * hw * SQ_F, y: sy - sn * hl * SQ_F - cs * hw * SQ_F },
-    { x: sx - cs * hl - sn * hw * SQ_F, y: sy - sn * hl * SQ_F + cs * hw * SQ_F },
-  ];
+  /* rotate in the ground plane, then squash the vertical axis */
+  const pt = (fx, fy) => ({ x: sx + (fx * cs - fy * sn), y: sy + (fx * sn + fy * cs) * SQ_F });
+  const cor = [pt(hl, -hw), pt(hl, hw), pt(-hl, hw), pt(-hl, -hw)];
   paintCar(cor, H, col, num, L);
 }
 const SQ_F = 0.58;
