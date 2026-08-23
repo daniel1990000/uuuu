@@ -127,7 +127,7 @@ function carStats(car) {
     maxdur: Math.round(def.dur * libMult(e) * car.quality),
     exp: def.exp, ad: 10 * (APT[def.ad] || 1), rep: APT[def.rep] || 1,
     apt: {}, drv: 0, sc: 0, turbo: 0, brake: 0, anl: 0, xp: 0, pit: 0, fuel: 0,
-    surf: { short: 0, mid: 0, ss: 0, road: 0 } };
+    surf: { short: 0, mid: 0, ss: 0, road: 0, street: 0 } };
   for (const k in def.apt) s.apt[k] = APT[def.apt[k]];
   for (const p of car.parts) {
     const pd = byId(PARTS, p.id), pe = libEntry("part", p.id);
@@ -146,7 +146,10 @@ function carStats(car) {
 function carPerf(car, surf) {
   const s = carStats(car);
   const w = { short: { spd: .24, acc: .34, hdl: .42 }, mid: { spd: .40, acc: .26, hdl: .34 },
-    ss: { spd: .56, acc: .16, hdl: .28 }, road: { spd: .28, acc: .30, hdl: .42 } }[surf];
+    ss: { spd: .56, acc: .16, hdl: .28 }, road: { spd: .28, acc: .30, hdl: .42 },
+    /* street: no straight long enough to matter, so it is all traction
+       out of ninety-degree corners and the handling to place the car */
+    street: { spd: .18, acc: .38, hdl: .44 } }[surf];
   let base = (s.spd * w.spd + s.acc * w.acc + s.hdl * w.hdl);
   base *= (s.apt[surf] || 1);
   base += (s.surf[surf] || 0) * 0.8;
@@ -155,7 +158,8 @@ function carPerf(car, surf) {
 }
 function driverPerf(d, surf) {
   const w = { short: { pd: .30, sh: .30, st: .40 }, mid: { pd: .38, sh: .28, st: .34 },
-    ss: { pd: .46, sh: .22, st: .32 }, road: { pd: .28, sh: .32, st: .40 } }[surf];
+    ss: { pd: .46, sh: .22, st: .32 }, road: { pd: .28, sh: .32, st: .40 },
+    street: { pd: .20, sh: .34, st: .46 } }[surf];
   const en = 0.72 + 0.28 * (d.energy / 100);
   return (d.pd * w.pd + d.sh * w.sh + d.st * w.st) * (1 + (d.lv - 1) * 0.04) * en;
 }

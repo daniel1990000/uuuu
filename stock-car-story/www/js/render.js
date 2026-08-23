@@ -543,25 +543,46 @@ function buildScenery(tk, track, HALF) {
   S.push({ t: "building", d: bs.start + bl * 0.30, off: HALF + 34, w: 18, l: 13, h: 11, col: "#dfe6ef", roof: "#2255cc", label: "CARE" });
   S.push({ t: "tower", d: fs.start + fl * 0.62, off: HALF + 15.5 });
 
-  /* --- lake and greenery in the middle --- */
-  S.push({ t: "lake", d: bs.start + bl * 0.62, off: HALF + 40, rx: 30, ry: 13 });
-  for (let i = 0; i < 14; i++) {
-    const d = (i / 14) * tk.len;
-    S.push({ t: "tree", d, off: HALF + 26 + ((i * 37) % 30), kind: track.surf === "ss" ? "palm" : "pine" });
+  if (track.surf === "street") {
+    /* A street circuit is a city with a race running through it, so the
+       scenery is blocks of buildings on both kerbs rather than an
+       infield.  Heights and widths are stepped off a fixed sequence so
+       the skyline reads as a real street rather than as noise. */
+    const HGT = [26, 15, 34, 19, 44, 12, 30, 22, 38, 17];
+    const WID = [20, 15, 24, 18, 28, 14, 22, 16];
+    for (let i = 0; i < 26; i++) {
+      const d = (i / 26) * tk.len + 9;
+      const inner = i % 2 === 0;
+      S.push({ t: "city", d, off: (inner ? HALF + 20 : -HALF - 22),
+        w: WID[i % 8], l: WID[(i + 3) % 8] * 0.8, h: HGT[i % 10], i });
+    }
+    /* street furniture along the kerb line */
+    for (let i = 0; i < 18; i++)
+      S.push({ t: "light", d: (i / 18) * tk.len, off: -HALF - 12 });
+    for (let i = 0; i < 8; i++)
+      S.push({ t: "tree", d: (i / 8) * tk.len + 20, off: HALF + 13, kind: "pine" });
+  } else {
+    /* --- lake and greenery in the middle --- */
+    S.push({ t: "lake", d: bs.start + bl * 0.62, off: HALF + 40, rx: 30, ry: 13 });
+    for (let i = 0; i < 14; i++) {
+      const d = (i / 14) * tk.len;
+      S.push({ t: "tree", d, off: HALF + 26 + ((i * 37) % 30), kind: track.surf === "ss" ? "palm" : "pine" });
+    }
+    /* motorhomes parked up in the infield */
+    for (let i = 0; i < 5; i++)
+      S.push({ t: "rv", d: bs.start + bl * (0.18 + i * 0.15), off: HALF + 30, i });
   }
-  /* motorhomes parked up in the infield */
-  for (let i = 0; i < 5; i++)
-    S.push({ t: "rv", d: bs.start + bl * (0.18 + i * 0.15), off: HALF + 30, i });
 
-  /* --- a car park outside the main grandstand --- */
-  for (let i = 0; i < 26; i++) {
-    const d = fs.start - 30 + (i % 13) * (fl / 12);
-    S.push({ t: "parked", d, off: -HALF - 34 - Math.floor(i / 13) * 10, i });
+  if (track.surf !== "street") {
+    /* --- a car park outside the main grandstand --- */
+    for (let i = 0; i < 26; i++) {
+      const d = fs.start - 30 + (i % 13) * (fl / 12);
+      S.push({ t: "parked", d, off: -HALF - 34 - Math.floor(i / 13) * 10, i });
+    }
+    /* --- floodlights outside the stands --- */
+    for (let i = 0; i < 22; i++)
+      S.push({ t: "light", d: (i / 22) * tk.len, off: -HALF - 30 });
   }
-
-  /* --- perimeter fence and floodlights outside the stands --- */
-  for (let i = 0; i < 22; i++)
-    S.push({ t: "light", d: (i / 22) * tk.len, off: -HALF - 30 });
 
   /* --- marshal posts around the outside, on the corners --- */
   for (let d = 0; d < tk.len; d += 90) {
@@ -638,6 +659,38 @@ function drawSceneItem(it, tk, HALF) {
       quadS(lift(b2.cor[0], b2.H + 2 * u), lift(b2.cor[1], b2.H + 2 * u),
             lift(b2.cor[2], b2.H + 2 * u), lift(b2.cor[3], b2.H + 2 * u), it.roof);
       if (sc > 2) txt(it.label, topMid.x, topMid.y + 3 * u, "#48506a", 6, "center");
+      break;
+    }
+    case "city": {
+      /* A city block on a street circuit.  The walls carry the authored
+         facade so the storeys read as real windows rather than a flat
+         slab, and the pavement is laid at its foot. */
+      const cor = boxCorners(p, it.off, it.l, it.w).map(W2S);
+      const H = it.h * sc * 0.5;
+      const ROOFC = ["#5b6472", "#6a5346", "#4e5867", "#6b6357"];
+      const roof = ROOFC[it.i % 4];
+      const fs2 = [];
+      for (let k = 0; k < 4; k++) {
+        const a = cor[k], b = cor[(k + 1) % 4];
+        fs2.push({ a, b, my: (a.y + b.y) / 2 });
+      }
+      fs2.sort((x, y2) => x.my - y2.my);
+      const storeys = Math.max(1, Math.round(it.h / 9));
+      for (const f of fs2) {
+        const len = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y);
+        face(f.a, f.b, H, f.my > (cor[0].y + cor[2].y) / 2 ? "#3f4653" : "#525b69");
+        if (sc > 1.6 && len > 6) {
+          /* one repeat per ~4 window bays: any denser and the storeys
+             collapse into stripes instead of reading as windows */
+          fillQuadTex(lift(f.a, H), lift(f.b, H), f.a, "facade",
+            Math.max(1, Math.round(len / (30 * u))), storeys,
+            f.my > (cor[0].y + cor[2].y) / 2 ? 0.55 : 0.92);
+        }
+      }
+      quadS(lift(cor[0], H), lift(cor[1], H), lift(cor[2], H), lift(cor[3], H), roof);
+      /* parapet, so the roofline is not a bare edge */
+      quadS(lift(cor[0], H + 1.4 * u), lift(cor[1], H + 1.4 * u),
+            lift(cor[2], H + 1.4 * u), lift(cor[3], H + 1.4 * u), shade(roof, 0.18));
       break;
     }
     case "tower": {
@@ -880,9 +933,33 @@ function drawRace() {
     }
     cx.stroke();
   };
-  line(HALF - 0.7, 2 * (PX / 2), dirt ? "#d8c49a" : "#eef2f8");     // inside edge
-  line(-HALF + 0.7, 2 * (PX / 2), dirt ? "#d8c49a" : "#eef2f8");    // outside edge
-  if (!dirt) line(HALF + 2.6, 1.6 * (PX / 2), "#f0c53c");            // apron warning line
+  line(HALF - 0.7, 2 * (PX / 2), "#eef2f8");                        // inside edge
+  line(-HALF + 0.7, 2 * (PX / 2), "#eef2f8");                       // outside edge
+  /* the apron warning line belongs to an oval; a street course has a
+     kerb and then a wall, with nowhere to run to */
+  if (track.surf !== "street") line(HALF + 2.6, 1.6 * (PX / 2), "#f0c53c");
+
+  /* --- kerbs ---
+     Road and street courses kerb the apex of every real corner.  Which
+     side that is depends on which way the corner bends, so this walks
+     the signed curvature and lays authored kerb blocks down the inside
+     edge wherever the bend is tight enough to warrant one, breaking the
+     run whenever the track changes hands. */
+  if (road || track.surf === "street") {
+    const kw = Math.max(2.5, VIEW.sc * 1.5);
+    let run = [], runSide = 0;
+    const flushKerb = () => {
+      if (run.length > 1) stripTex(run, kw * runSide, "kerb", Math.max(1, kw / 5), 0);
+      run = [];
+    };
+    for (let d = d0; d <= d1; d += step) {
+      const p = sampleTrack(tk, d);
+      const side = Math.abs(p.cs) > 0.26 ? Math.sign(p.cs) : 0;
+      if (side !== runSide) { flushKerb(); runSide = side; }
+      if (side !== 0) run.push(W2S(offsetPoint(p, side > 0 ? HALF - 0.4 : -HALF + 0.4)));
+    }
+    flushKerb();
+  }
 
   drawPitRoad(tk, HALF);
   drawScenery(tk, HALF, d0, d1);

@@ -95,6 +95,84 @@ const GEOS = {
     {k:"s", l:180, b:2, f:1},
     {k:"a", r:100, d:180, b:15},
   ],
+  /* Infield road course: the oval frontstretch, a dive into the infield
+     for a technical loop, then back out through the banking.  The
+     infield section nets zero, so the two oval ends still supply the
+     whole +360 — which is exactly how a real one is laid out. */
+  roadoval: [
+    {k:"s", l:250, b:2, f:1},          // frontstretch, oval speeds
+    {k:"a", r:70,  d:90,  b:4},        // dive left off the banking
+    {k:"s", l:110, b:0},
+    {k:"a", r:44,  d:-95, b:2},
+    {k:"s", l:95,  b:0},
+    {k:"a", r:38,  d:100, b:2},
+    {k:"s", l:140, b:0, f:1},
+    {k:"a", r:50,  d:-85, b:2},
+    {k:"s", l:80,  b:0},
+    {k:"a", r:42,  d:95,  b:3},
+    {k:"s", l:120, b:0},
+    {k:"a", r:58,  d:-105,b:3},        // back out onto the banking
+    {k:"s", l:160, b:2, f:1},
+    {k:"a", r:118, d:180, b:20},       // oval end
+    {k:"s", l:200, b:2, f:1},
+    {k:"a", r:118, d:180, b:20},       // oval end
+  ],
+  /* Park road course: a long opening sweeper, esses, a hairpin and a
+     fast right that never quite lets go. */
+  roadlong: [
+    {k:"s", l:280, b:0, f:1},
+    {k:"a", r:56,  d:155, b:3},        // the long turn one
+    {k:"s", l:100, b:0},
+    {k:"a", r:40,  d:-70, b:2},
+    {k:"a", r:40,  d:70,  b:2},        // esses
+    {k:"s", l:130, b:0, f:1},
+    {k:"a", r:34,  d:160, b:3},        // hairpin
+    {k:"s", l:170, b:0},
+    {k:"a", r:90,  d:-120,b:4},        // the long right
+    {k:"s", l:110, b:0},
+    {k:"a", r:48,  d:130, b:3},
+    {k:"s", l:140, b:0, f:1},
+    {k:"a", r:44,  d:-85, b:2},
+    {k:"a", r:52,  d:120, b:3},
+  ],
+  /* Street circuit: public roads closed for the weekend.  Ninety-degree
+     block corners, no run-off anywhere, concrete on both sides. */
+  street: [
+    {k:"s", l:300, b:0, f:1},          // the long shoreline straight
+    {k:"a", r:28,  d:90,  b:0},
+    {k:"s", l:150, b:0},
+    {k:"a", r:26,  d:90,  b:0},
+    {k:"s", l:120, b:0, f:1},
+    {k:"a", r:22,  d:-90, b:0},        // a jog around one block
+    {k:"s", l:80,  b:0},
+    {k:"a", r:22,  d:90,  b:0},
+    {k:"s", l:200, b:0, f:1},
+    {k:"a", r:30,  d:90,  b:0},
+    {k:"s", l:170, b:0},
+    {k:"a", r:24,  d:-90, b:0},
+    {k:"s", l:90,  b:0},
+    {k:"a", r:24,  d:90,  b:0},
+    {k:"s", l:130, b:0, f:1},
+    {k:"a", r:26,  d:90,  b:0},
+  ],
+  /* Tighter street circuit: shorter blocks and a hairpin round a
+     monument, so it is all first and second gear. */
+  streettight: [
+    {k:"s", l:220, b:0, f:1},
+    {k:"a", r:24,  d:90, b:0},
+    {k:"s", l:110, b:0},
+    {k:"a", r:20,  d:90, b:0},
+    {k:"s", l:140, b:0, f:1},
+    {k:"a", r:18,  d:-90,b:0},
+    {k:"s", l:70,  b:0},
+    {k:"a", r:18,  d:-90,b:0},
+    {k:"s", l:100, b:0},
+    {k:"a", r:16,  d:180,b:0},         // the hairpin round the monument
+    {k:"s", l:120, b:0, f:1},
+    {k:"a", r:22,  d:90, b:0},
+    {k:"s", l:160, b:0},
+    {k:"a", r:26,  d:90, b:0},
+  ],
   /* Road course: esses, a hairpin, a long back straight.
      Rights are negative; the whole thing still nets +360.      */
   road: [
@@ -185,7 +263,7 @@ function buildTrack(geoName) {
       const n = Math.max(1, Math.round(l / STEP)), dl = l / n;
       for (let i = 0; i < n; i++) {
         x += Math.cos(h) * dl; y += Math.sin(h) * dl; s += dl;
-        pts.push({ x, y, h, b: seg.b || 0, c: 0, s });
+        pts.push({ x, y, h, b: seg.b || 0, c: 0, cs: 0, s });
       }
     } else {
       const total = seg.d * RAD, arcLen = Math.abs(total) * seg.r;
@@ -195,7 +273,7 @@ function buildTrack(geoName) {
       for (let i = 0; i < n; i++) {
         h += dh;
         x += Math.cos(h) * dl; y += Math.sin(h) * dl; s += dl;
-        pts.push({ x, y, h, b: seg.b || 0, c: curv, s });
+        pts.push({ x, y, h, b: seg.b || 0, c: curv, cs: Math.sign(total) * curv, s });
       }
     }
   }
@@ -235,7 +313,10 @@ function sampleTrack(tk, dist) {
   const ax = lo === 0 ? 0 : a.x, ay = lo === 0 ? 0 : a.y;
   return { x: ax + (b.x - ax) * t, y: ay + (b.y - ay) * t,
            h: b.h, b: (lo === 0 ? b.b : a.b + (b.b - a.b) * t),
-           c: (lo === 0 ? b.c : a.c + (b.c - a.c) * t) };
+           c: (lo === 0 ? b.c : a.c + (b.c - a.c) * t),
+           /* signed: positive bends left, negative bends right.  Kerbs need
+              to know which side the apex is on; the AI only needs how hard. */
+           cs: (lo === 0 ? b.cs : a.cs + (b.cs - a.cs) * t) };
 }
 
 /* Offset sideways; positive = toward the infield (left of travel). */

@@ -446,6 +446,7 @@ function scrParts() {
 /* Part effects in words, so the list reads without a legend. */
 const FX_NAME = { spd: "Speed", acc: "Accel", hdl: "Handling", dur: "Durability",
   short: "Short track", mid: "Intermediate", ss: "Superspeedway", road: "Road course",
+  street: "Street circuit",
   pit: "Pit speed", fuel: "Fuel range", ad: "Advertising" };
 function fxText(fx) {
   return Object.entries(fx).map(([k, v]) =>

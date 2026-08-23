@@ -124,6 +124,10 @@ function raceLanes(surf) {
   if (surf === "ss")   return { lo: 0.10, hi: 0.90, line: 0.34 };   // three wide
   if (surf === "mid")  return { lo: 0.14, hi: 0.86, line: 0.34 };
   if (surf === "road") return { lo: 0.18, hi: 0.82, line: 0.40 };
+  /* A street circuit is a closed public road: barely wider than two cars,
+     with a wall where the run-off would be.  Passing means the braking
+     zones or nothing, so the usable band is the narrowest in the game. */
+  if (surf === "street") return { lo: 0.26, hi: 0.74, line: 0.44 };
   return { lo: 0.20, hi: 0.80, line: 0.32 };                        // short track, two wide
 }
 /* signed gap to another car along the lap, in world units */
@@ -273,7 +277,7 @@ function raceTick(dt) {
       target *= 0.992;                                // side-by-side scrubs speed
       c.sbs = 1;
     } else c.sbs = 0;
-    const rate = (track.surf === "road" ? 0.75 : 0.55) * dt;
+    const rate = (track.surf === "road" ? 0.75 : track.surf === "street" ? 0.85 : 0.55) * dt;
     c.lane += clamp(want - c.lane, -rate, rate);
     c.lane = clamp(c.lane, lanes.lo, lanes.hi);
     c.pace = target;
@@ -291,7 +295,7 @@ function raceTick(dt) {
       if (c.isP) {
         /* a healthy car spends roughly a fifth of its durability per race,
            more on the rough stuff, so it lasts about five events */
-        const wearMul = { short: 1.35, ss: 1.1, mid: 1.0, road: 1.15 }[track.surf];
+        const wearMul = { short: 1.35, ss: 1.1, mid: 1.0, road: 1.15, street: 1.45 }[track.surf];
         c.dur = Math.max(0, c.dur - (c.maxdur * 0.20 / track.laps) * wearMul * rnd(0.7, 1.4));
         R.rp += 1 + (c.anl || 10) / 26;
         R.ad += (c.adRate || 10) / 14;
@@ -349,7 +353,9 @@ function onLeaderLap() {
   }
   /* cautions */
   if (!R.yellow && R.leader.lap < track.laps - 1) {
-    const base = { short: 0.045, mid: 0.028, ss: 0.042, road: 0.018 }[track.surf];
+    /* Concrete on both sides and no run-off: a mistake on a street course
+       is a caution far more often than the same mistake on a road course. */
+    const base = { short: 0.045, mid: 0.028, ss: 0.042, road: 0.018, street: 0.052 }[track.surf];
     if (Math.random() < base) throwCaution();
   }
 }

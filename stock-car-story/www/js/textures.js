@@ -320,6 +320,33 @@ const TEX_FENCE = [
   "........",
 ];
 
+/* City facade for the street circuits: floors of lit and dark windows
+   over a spandrel band.  16 wide so a building of any width tiles it,
+   8 tall so one repeat is one storey. */
+const TEX_FACADE = [
+  "iiiiiiiiiiiiiiii",
+  "hEEhhEEhhEEhhEEh",
+  "hEyhhEEhhyEhhEEh",
+  "hEEhhyEhhEEhhyEh",
+  "iiiiiiiiiiiiiiii",
+  "gggggggggggggggg",
+  "gggggggggggggggg",
+  "iiiiiiiiiiiiiiii",
+];
+
+/* Pavement: flagstones with a kerbstone edge, for the street courses
+   where the run-off would otherwise be. */
+const TEX_PAVEMENT = [
+  "hhhhhhhhiiiiiiii",
+  "hgggggghiggggggi",
+  "hgggggghiggggggi",
+  "hgggggghiggggggi",
+  "hhhhhhhhiiiiiiii",
+  "iggggggihggggggh",
+  "iggggggihggggggh",
+  "iiiiiiiihhhhhhhh",
+];
+
 /* Garage floor: sealed concrete with a painted bay outline, a
    drain channel and the odd oil stain. */
 const TEX_GARAGE_FLOOR = [
@@ -382,6 +409,7 @@ const TEX_MAPS = {
   seats: TEX_SEATS, safer: TEX_SAFER, concwall: TEX_CONCWALL,
   kerb: TEX_KERB, fence: TEX_FENCE,
   garageFloor: TEX_GARAGE_FLOOR, garageWall: TEX_GARAGE_WALL,
+  facade: TEX_FACADE, pavement: TEX_PAVEMENT,
 };
 const TEX = {};
 

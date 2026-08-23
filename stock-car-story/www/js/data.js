@@ -10,7 +10,7 @@ const APT = { S: 1.25, A: 1.12, B: 1.0, C: 0.85, D: 0.68 };
 const APT_SYM = { S: "◎", A: "○", B: "○", C: "△", D: "✕" };
 
 /* Surface families a track can be */
-const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", road: "Road Course" };
+const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", road: "Road Course", street: "Street Circuit" };
 
 /* ---------- CARS (chassis) ----------
    res  = research points to unlock blueprint
@@ -20,35 +20,35 @@ const SURF = { short: "Short Track", mid: "Intermediate", ss: "Superspeedway", r
    unlock: {t:'start'|'date'|'race'|'sponsor'|'carUp'|'series', ...}          */
 const CARS = [
  {id:"street", name:"Street Stocker", rank:"E", res:0,   cost:100, dur:100, spd:35,  acc:30,  hdl:60,  exp:2, ad:"B", rep:"A",
-  apt:{short:"A",mid:"C",ss:"D",road:"C"}, paint:true,  unlock:{t:"start"}},
+  apt:{short:"A",mid:"C",ss:"D",road:"C",street:"B"}, paint:true,  unlock:{t:"start"}},
  {id:"late",   name:"Late Model",     rank:"D", res:60,  cost:300, dur:110, spd:65,  acc:60,  hdl:120, exp:2, ad:"B", rep:"A",
-  apt:{short:"S",mid:"B",ss:"C",road:"C"}, paint:true,  unlock:{t:"race",id:"pineridge"}},
+  apt:{short:"S",mid:"B",ss:"C",road:"C",street:"B"}, paint:true,  unlock:{t:"race",id:"pineridge"}},
  {id:"dirtmod",name:"Short Track Modified", rank:"D", res:40,  cost:300, dur:140, spd:70,  acc:60,  hdl:90,  exp:3, ad:"B", rep:"B",
-  apt:{short:"A",mid:"C",ss:"D",road:"C"}, paint:true,  unlock:{t:"carUp",id:"street",pct:20}},
+  apt:{short:"A",mid:"C",ss:"D",road:"C",street:"A"}, paint:true,  unlock:{t:"carUp",id:"street",pct:20}},
  {id:"dragster",name:"Dragster Stock",rank:"D", res:200, cost:0,   dur:60,  spd:90,  acc:80,  hdl:50,  exp:2, ad:"B", rep:"A",
-  apt:{short:"B",mid:"B",ss:"C",road:"D"}, paint:true,  unlock:{t:"race",id:"saltflats"}},
+  apt:{short:"B",mid:"B",ss:"C",road:"D",street:"D"}, paint:true,  unlock:{t:"race",id:"saltflats"}},
  {id:"truck",  name:"Race Truck",     rank:"C", res:80,  cost:500, dur:120, spd:90,  acc:70,  hdl:70,  exp:3, ad:"S", rep:"A",
-  apt:{short:"A",mid:"B",ss:"C",road:"C"}, paint:false, unlock:{t:"sponsor",id:"bigrig"}},
+  apt:{short:"A",mid:"B",ss:"C",road:"C",street:"C"}, paint:false, unlock:{t:"sponsor",id:"bigrig"}},
  {id:"pony",   name:"Pony Coupe",     rank:"C", res:280, cost:500, dur:100, spd:70,  acc:70,  hdl:80,  exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"B",ss:"B",road:"A"}, paint:false, unlock:{t:"race",id:"hogback"}},
+  apt:{short:"B",mid:"B",ss:"B",road:"A",street:"A"}, paint:false, unlock:{t:"race",id:"hogback"}},
  {id:"sonic",  name:"Sonic Stocker",  rank:"C", res:140, cost:600, dur:130, spd:90,  acc:100, hdl:160, exp:2, ad:"B", rep:"B",
-  apt:{short:"A",mid:"A",ss:"C",road:"A"}, paint:true,  unlock:{t:"carUp",id:"late",pct:50}},
+  apt:{short:"A",mid:"A",ss:"C",road:"A",street:"S"}, paint:true,  unlock:{t:"carUp",id:"late",pct:50}},
  {id:"torpedo",name:"Torpedo Body",   rank:"C", res:100, cost:400, dur:90,  spd:130, acc:150, hdl:80,  exp:2, ad:"B", rep:"B",
-  apt:{short:"C",mid:"A",ss:"A",road:"C"}, paint:true,  unlock:{t:"carUp",id:"dragster",pct:50}},
+  apt:{short:"C",mid:"A",ss:"A",road:"C",street:"D"}, paint:true,  unlock:{t:"carUp",id:"dragster",pct:50}},
  {id:"proto",  name:"Proto Stocker",  rank:"C", res:100, cost:600, dur:200, spd:110, acc:105, hdl:130, exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"B",ss:"B",road:"B"}, paint:true,  unlock:{t:"carUp",id:"dirtmod",pct:50}},
+  apt:{short:"B",mid:"B",ss:"B",road:"B",street:"B"}, paint:true,  unlock:{t:"carUp",id:"dirtmod",pct:50}},
  {id:"aero",   name:"Aero Coupe",     rank:"B", res:250, cost:900, dur:160, spd:140, acc:150, hdl:220, exp:3, ad:"B", rep:"B",
-  apt:{short:"B",mid:"A",ss:"B",road:"A"}, paint:true,  unlock:{t:"carUp",id:"sonic",pct:50}},
+  apt:{short:"B",mid:"A",ss:"B",road:"A",street:"A"}, paint:true,  unlock:{t:"carUp",id:"sonic",pct:50}},
  {id:"spiral", name:"Superbird",      rank:"B", res:200, cost:800, dur:120, spd:200, acc:190, hdl:100, exp:3, ad:"B", rep:"B",
-  apt:{short:"C",mid:"A",ss:"S",road:"C"}, paint:true,  unlock:{t:"carUp",id:"torpedo",pct:50}},
+  apt:{short:"C",mid:"A",ss:"S",road:"C",street:"D"}, paint:true,  unlock:{t:"carUp",id:"torpedo",pct:50}},
  {id:"hauler", name:"Big Block Brawler",rank:"A",res:800, cost:280, dur:280, spd:100, acc:250, hdl:50,  exp:4, ad:"B", rep:"C",
-  apt:{short:"A",mid:"B",ss:"C",road:"C"}, paint:false, unlock:{t:"sponsor",id:"piggy"}},
+  apt:{short:"A",mid:"B",ss:"C",road:"C",street:"D"}, paint:false, unlock:{t:"sponsor",id:"piggy"}},
  {id:"gen4",   name:"Gen-4 Cup Car",  rank:"A", res:200, cost:900, dur:240, spd:160, acc:150, hdl:155, exp:4, ad:"S", rep:"B",
-  apt:{short:"A",mid:"S",ss:"A",road:"A"}, paint:true,  unlock:{t:"carUp",id:"proto",pct:50}},
+  apt:{short:"A",mid:"S",ss:"A",road:"A",street:"A"}, paint:true,  unlock:{t:"carUp",id:"proto",pct:50}},
  {id:"moonshine",name:"Moonshine Special",rank:"S",res:12,cost:10, dur:10,  spd:210, acc:260, hdl:230, exp:4, ad:"S", rep:"S",
-  apt:{short:"S",mid:"A",ss:"A",road:"B"}, paint:false, unlock:{t:"race",id:"thunderroad"}},
+  apt:{short:"S",mid:"A",ss:"A",road:"B",street:"B"}, paint:false, unlock:{t:"race",id:"thunderroad"}},
  {id:"nextgen",name:"NextGen Cup",    rank:"S", res:400, cost:1200,dur:160, spd:200, acc:180, hdl:190, exp:4, ad:"B", rep:"B",
-  apt:{short:"A",mid:"S",ss:"S",road:"S"}, paint:true,  unlock:{t:"carUp2",a:"spiral",b:"aero",pct:50}},
+  apt:{short:"A",mid:"S",ss:"S",road:"S",street:"S"}, paint:true,  unlock:{t:"carUp2",a:"spiral",b:"aero",pct:50}},
 ];
 
 /* ---------- PARTS ----------
@@ -256,6 +256,14 @@ const TRACKS = [
   prize:[520,260,156,87,48,24],fans:450,ad:250, unlock:{t:"race",id:"yellowhammer"}, desc:"The crown jewel. 600 miles of attrition."},
  {id:"thunderroad",n:"Thunder Road",        surf:"short", geo:"paperclip", mi:0.75, laps:34, fee:46,
   prize:[480,240,144,80,44,22],fans:400,ad:230, unlock:{t:"race",id:"clayton"}, desc:"Where the bootleggers started it all. Flat and mean."},
+ {id:"lakeshore",  n:"Lakeshore Street Race",surf:"street",geo:"street",    mi:2.20, laps:20, fee:28,
+  prize:[290,145,87,49,27,13],fans:240, ad:145, unlock:{t:"race",id:"hogback"}, desc:"City streets, concrete both sides. No room for a mistake."},
+ {id:"harborloop", n:"Harbor Loop",         surf:"street",geo:"streettight",mi:1.60, laps:26, fee:42,
+  prize:[420,210,126,70,38,19],fans:360, ad:200, unlock:{t:"race",id:"lakeshore"}, desc:"Second gear round a monument. Brakes cook, tempers too."},
+ {id:"crestline",  n:"Crestline Park",      surf:"road",  geo:"roadlong",  mi:3.10, laps:14, fee:48,
+  prize:[500,250,150,84,46,23],fans:420, ad:240, unlock:{t:"garage",lv:3}, desc:"A long opening sweeper and a hairpin that eats front tires."},
+ {id:"bigbeachrc", n:"Big Beach Road Course",surf:"road", geo:"roadoval",  mi:3.56, laps:12, fee:54,
+  prize:[560,280,168,94,52,26],fans:480, ad:270, unlock:{t:"race",id:"bigbeach"}, desc:"Down the banking, hard left into the infield. Two tracks in one."},
  {id:"kairodome",  n:"Retro Dome",          surf:"short", geo:"bowl",      mi:0.75, laps:44, fee:60,
   prize:[620,310,186,104,57,29],fans:520,ad:300, unlock:{t:"series",id:"cup"}, desc:"An indoor short track. Pure chaos."},
 ];
