@@ -37,7 +37,8 @@ Or open `dist/index.html` directly — the whole game is one self-contained file
 | `www/` | the game (this is what ships) |
 | `www/js/track.js` | track geometry engine and loop-closure solver |
 | `www/js/race.js` | race simulation and championships |
-| `www/js/render.js` | all pixel art, drawn in code |
+| `www/js/sprites.js` | hand-authored pixel art + the voxel car baker |
+| `www/js/render.js` | scene composition and the chase camera |
 | `tools/build.js` | inlines everything into `dist/index.html` |
 | `GAME_DESIGN.md` | systems reference and design rationale |
 | `RELEASE.md` | Android, iOS and web release steps |
@@ -56,7 +57,7 @@ npm run cap:sync         # copy www/ into the native shells
 
 ## Originality
 
-All art is generated procedurally in `render.js`. Every track, sponsor, driver
-and team name is invented; no real racing series, sanctioning body, team or
+All art is authored pixel by pixel in `sprites.js`. Every track, sponsor,
+driver and team name is invented; no real racing series, sanctioning body, team or
 driver is referenced, and no third-party assets are used. The game is an
 original work in the tradition of Japanese pixel management sims.

@@ -6,8 +6,8 @@ oval racing). This document records what the game does and why, so the
 build stays coherent as it grows.
 
 > **Originality.** Every system here was rebuilt from an analysis of the
-> genre's mechanics; no assets, code or text were copied. All art is drawn
-> procedurally in `render.js`. All names — tracks, sponsors, drivers, teams —
+> genre's mechanics; no assets, code or text were copied. All art is authored
+> pixel by pixel in `sprites.js`. All names — tracks, sponsors, drivers, teams —
 > are invented. No real racing series, sanctioning body, team or driver is
 > referenced. That is a deliberate constraint: style is free, assets and
 > trademarks are not, and a store takedown is fatal to a small release.
