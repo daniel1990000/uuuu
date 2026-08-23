@@ -199,6 +199,11 @@ afford, rest a tired driver, enter the next round of the championship. It sits
 under the status bar and updates as the clock runs, so there is never a moment
 where the answer to "what now?" is hidden in a menu.
 
+**Controls say what they do.** The old bottom bar had a bare "▶" glyph that
+told nobody anything; the speed control is now a labelled button over the scene
+reading "1× SPEED", "2× SPEED" or "PAUSED", and Save moved into the More menu
+alongside autosave. That removed a whole bar and the ambiguity with it.
+
 **A real tab bar.** Five permanent tabs — Team, Machines, Race, Develop, More —
 each a 52px touch target, with a red dot when something is waiting behind it.
 Screens open as full-screen sheets *inside the scene area*, so the tab bar stays
@@ -206,6 +211,19 @@ visible and reachable underneath: switching section is always one tap, never a
 trip back through a menu. Each sheet has a large ✕ in its header and a Close
 button in a sticky footer, and both return you to the shop rather than to a menu
 you never opened.
+
+**Race strategy** is two decisions before the flag and one during it, which is
+about all a phone race can carry without a manual. Tyres are Soft / Medium /
+Hard, trading grip against wear; fuel is a short fill or a full tank, trading
+weight against range. During the race you call your own stops with the PIT
+button and choose tyres, fuel or both — a partial stop is quicker, and stopping
+under caution costs roughly half the time. If you never touch it the crew calls
+you in before the tyres are gone, so ignoring strategy costs you an edge rather
+than the race. Rivals deliberately run a neutral plan: their difficulty already
+comes from the strength band, and letting them stack compound bonuses on top
+would just tax the player for a choice the AI never really makes. Measured over
+nine races at Maple City, soft-and-light averages a 3.9 finish against medium's
+5.4 — worth about a position and a half.
 
 **Research reads as three steps**, because that is what it is: ① research a
 blueprint with research data, ② build or buy the thing with money, ③ upgrade the

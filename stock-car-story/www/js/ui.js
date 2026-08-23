@@ -69,9 +69,10 @@ function updateChrome() {
   $("moneyBox").textContent = fmtK(G.money);
   $("rpBox").textContent = "RP " + Math.floor(G.rp);
   $("fanBox").textContent = G.fans >= 10000 ? ((G.fans / 1000).toFixed(0) + "k") : G.fans >= 1000 ? ((G.fans / 1000).toFixed(1) + "k") : G.fans;
-  const t = G.teams[G.curTeam], d = t && G.drivers[t.driver];
-  $("drvPill").textContent = d ? d.name + " Lv" + d.lv : "— no driver —";
-  $("clockPill").textContent = G.set.paused ? "❚❚" : G.set.speed === 2 ? "▶▶" : "▶";
+  const sp = $("speedBtn");
+  sp.classList.toggle("paused", !!G.set.paused);
+  sp.querySelector(".ico").textContent = G.set.paused ? "❚❚" : G.set.speed === 2 ? "▶▶" : "▶";
+  sp.querySelector(".lbl").textContent = G.set.paused ? "PAUSED" : G.set.speed === 2 ? "2× SPEED" : "1× SPEED";
 }
 
 /* ---------- little widgets ---------- */
@@ -110,13 +111,19 @@ function auraPicker(cb, verb) {
 /* ============================================================
    MAIN MENU
    ============================================================ */
+function saveNow() {
+  sfx("click");
+  toast(saveGame() ? "Game saved." : "Save failed — storage is blocked.");
+  closeAllDlg();
+}
 function openMenu() {
   sfx("click");
   const items = [
     ["Team", "scrTeam", "👥"], ["Machines", "scrCars", "🏎"], ["Training", "scrTrain", "🏋"],
     ["Research", "scrResearch", "🔬"], ["Parts", "scrParts", "🔧"], ["Sponsors", "scrSponsors", "📣"],
     ["Enter Race", "scrRaces", "🏁"], ["Records", "scrRecords", "🏆"],
-    ["Auras", "scrAuras", "✨"], ["Options", "scrOptions", "⚙"]];
+    ["Auras", "scrAuras", "✨"], ["Sponsors", "scrSponsors", "📣"],
+    ["Save Game", "saveNow", "💾"], ["Options", "scrOptions", "⚙"]];
   const badge = (f) => {
     if (f === "scrRaces" && !SEASON) return "";
     if (f === "scrSponsors" && G.offers.length && G.sponsors.length < 2) return "<i class='dot'></i>";
@@ -607,36 +614,70 @@ function preRace(trackId, season) {
   const tr = byId(TRACKS, trackId);
   const fee = season ? 0 : tr.fee;
   if (G.money < fee) return toast("Can't afford the entry fee.");
-  /* warn before starting on a machine that probably won't survive */
   const pcar = G.cars[G.teams[G.curTeam].car];
   if (pcar && !preRace._ok) {
     const st = carStats(pcar), frac = pcar.dur / st.maxdur;
     if (frac < 0.35) {
       return dlg("Machine is damaged",
-        "#" + pcar.num + " " + esc(pcar.name) + " is at <span class='r'>" + Math.round(frac * 100) +
-        "% durability</span>. It will very likely blow up before the finish.<br><span class='small dim'>Repairing costs " +
-        fmtK(repairCost(pcar)) + " and takes a week or two.</span>",
+        "<div class='small'>#" + pcar.num + " " + esc(pcar.name) + " is at <b class='r'>" + Math.round(frac * 100) +
+        "% durability</b>. It will very likely blow up before the finish.<br><br>Repairing costs " +
+        fmtK(repairCost(pcar)) + " and takes a week or two.</div>",
         [["Race anyway", () => { closeDlg(); preRace._ok = 1; preRace(trackId, season); preRace._ok = 0; }],
-         ["Repair first", () => { closeDlg(); startRepair(G.teams[G.curTeam].car); updateChrome(); }],
-         ["Cancel", () => { closeDlg(); if (!season) scrRaces(); }]]);
+         ["Repair first", () => { closeAllDlg(); startRepair(G.teams[G.curTeam].car); updateChrome(); }],
+         ["Cancel", () => { closeAllDlg(); }]]);
     }
   }
-  const go = auraTier => {
+  scrStrategy(tr, season, fee);
+}
+
+/* The strategy sheet: pick rubber and fuel, then choose an aura. */
+function scrStrategy(tr, season, fee) {
+  SCR_TR = tr; SCR_SE = season; SCR_FEE = fee;
+  closeAllDlg();
+  const t = G.teams[G.curTeam];
+  const car = G.cars[t.car], drv = G.drivers[t.driver];
+  const st = carStats(car);
+  let h = "<div class='row'>" + carIcon(car) + "<div class='f1'><b class='b'>" + tr.n + "</b>" +
+    "<div class='small dim'>" + SURF[tr.surf] + " · " + tr.mi.toFixed(2) + " mi · " + tr.laps + " laps" +
+    (season ? "" : " · entry " + fmtK(fee)) + "</div>" +
+    "<div class='small'>" + esc(tr.desc) + "</div></div></div>";
+  h += "<div class='small dim'>" + esc(drv.name) + " · energy " + Math.floor(drv.energy) +
+    "/100 · machine " + car.dur + "/" + st.maxdur + "</div>";
+
+  h += "<h4>Tyres</h4>" + segBar(Object.keys(TYRES).map(k => [k, TYRES[k].n]), STRAT.tyre, "setTyre");
+  h += "<div class='small dim'>" + TYRES[STRAT.tyre].desc + "</div>";
+  h += "<h4>Fuel</h4>" + segBar(Object.keys(FUEL).map(k => [k, FUEL[k].n]), STRAT.fuel, "setFuel");
+  h += "<div class='small dim'>" + FUEL[STRAT.fuel].desc + "</div>";
+
+  /* aura is part of the same decision, not a second button */
+  if (anyAura()) {
+    const opts = [["none", "None"]];
+    for (const c of AURA_ORDER) if (G.auras[c] > 0) opts.push([c, AURAS[c].n + " ×" + G.auras[c]]);
+    if (!opts.some(o => o[0] === STRAT.aura)) STRAT.aura = "none";
+    h += "<h4>Aura</h4>" + segBar(opts, STRAT.aura || "none", "setAura");
+    h += "<div class='small dim'>" + (STRAT.aura && STRAT.aura !== "none"
+      ? "Spends one " + AURAS[STRAT.aura].n + " aura for a burst of speed you trigger yourself, worth +" +
+        Math.round((AURAS[STRAT.aura].boost - 1) * 100) + "% for " + AURAS[STRAT.aura].dur + " seconds."
+      : "Save your auras for training, builds and upgrades.") + "</div>";
+  }
+  h += "<div class='small' style='margin-top:10px'>You call your own stops with the <b class='b'>PIT</b> " +
+    "button during the race — tyres, fuel or both. Stopping under caution costs about half the time.</div>";
+
+  const go = () => {
+    const a = (STRAT.aura && STRAT.aura !== "none" && G.auras[STRAT.aura] > 0) ? STRAT.aura : null;
+    if (a) G.auras[a]--;
     G.money -= fee; updateChrome(); closeAllDlg();
     enterRaceMode();
-    startRace(tr, season, auraTier);
+    startRace(tr, season, a);
   };
-  const h = "<b class='b'>" + tr.n + "</b><div class='small dim'>" + SURF[tr.surf] + " · " + tr.mi.toFixed(2) +
-    " mi · " + tr.laps + " laps" + (season ? "" : " · fee " + fmtK(fee)) + "<br>" + tr.desc + "</div>";
-  const btns = [];
-  if (anyAura()) {
-    for (const c of AURA_ORDER.slice().reverse())
-      if (G.auras[c] > 0) btns.push(["Bring <span style='color:" + AURAS[c].col + "'>" + AURAS[c].n + "</span>", () => { G.auras[c]--; go(c); }]);
-    btns.push(["No aura", () => go(null)]);
-  } else btns.push(["Start!", () => go(null)]);
-  if (!season) btns.push(["Cancel", () => { closeDlg(); scrRaces(); }]);
-  dlg(season ? "Round " + (season.round + 1) : "Race Entry", h, btns);
+  const btns = [["🏁 START RACE", go]];
+  if (!season) btns.push(["Cancel", () => { closeAllDlg(); scrRaces(); }]);
+  dlg(season ? "Round " + (season.round + 1) : "Race strategy", h, btns);
 }
+function setAura(k) { STRAT.aura = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
+function setTyre(k) { STRAT.tyre = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
+function setFuel(k) { STRAT.fuel = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
+let SCR_TR = null, SCR_SE = null, SCR_FEE = 0;
 
 /* ============================================================
    RECORDS / AURAS / OPTIONS

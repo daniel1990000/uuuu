@@ -10,15 +10,17 @@ function enterRaceMode() {
   MODE = "race";
   $("objCard").classList.remove("on");
   $("tabbar").style.display = "none";
+  $("speedBtn").classList.remove("on");
+  $("order").classList.add("on");
   $("raceHud").style.display = "flex";
   $("auraBtn").style.display = "none";
-  $("botbar").classList.add("racing");
 }
 function exitRaceMode() {
   MODE = "shop";
   $("tabbar").style.display = "flex";
+  $("speedBtn").classList.add("on");
+  $("order").classList.remove("on");
   $("raceHud").style.display = "none";
-  $("botbar").classList.remove("racing");
 }
 
 function loop(ts) {
@@ -26,7 +28,10 @@ function loop(ts) {
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts; frame++;
 
-  if (MODE === "title") { $("tabbar").style.display = "none"; drawTitle(); return; }
+  if (MODE === "title") {
+    $("tabbar").style.display = "none"; $("speedBtn").classList.remove("on");
+    drawTitle(); return;
+  }
   if (!G) return;
 
   if (MODE === "race") {
@@ -55,9 +60,25 @@ function updateRaceHud() {
   const pos = playerPos();
   $("posBadge").textContent = "P" + pos;
   $("lapBox").innerHTML = "LAP " + Math.min(me.lap + 1, R.laps) + "/" + R.laps +
-    "<div class='hb2'><span>T</span><i style='width:" + Math.round(me.tyre) + "%'></i></div>" +
+    "<div class='hb2'><span>T</span><i style='width:" + Math.round(me.tyreLife) + "%'></i></div>" +
     "<div class='hb2 f'><span>F</span><i style='width:" + Math.round(me.fuel) + "%'></i></div>";
   $("spdBox").textContent = Math.round(me.v * MPH) + " mph";
+  /* pit button state */
+  const pb = $("pitBtn");
+  pb.classList.toggle("armed", pitArmed());
+  pb.firstChild.textContent = pitArmed() ? "BOX" : "PIT";
+  pb.querySelector("span").textContent = pitArmed() ? "this lap" : "call stop";
+  pb.disabled = R.phase !== "green";
+
+  /* running order: the three ahead, you, and the one behind */
+  const ord = raceOrder();
+  const mi = ord.indexOf(me);
+  const from = clamp(mi - 3, 0, Math.max(0, ord.length - 5));
+  const slice = ord.slice(from, from + 5);
+  $("order").innerHTML = slice.map((c, i) =>
+    "<div class='o" + (c.isP ? " me" : "") + "'><b>" + (from + i + 1) + "</b>" +
+    "<i style='background:" + c.col + "'></i><span>" + esc(c.name.split(" ")[0]) + "</span></div>").join("");
+
   const btn = $("auraBtn");
   if (R.auraTier && R.auraLeft > 0) {
     btn.style.display = "block";
@@ -88,6 +109,7 @@ function titleScreen() {
 function startShop() {
   MODE = "shop";
   $("tabbar").style.display = "flex";
+  $("speedBtn").classList.add("on");
   updateChrome();
   refreshObjective();
   if (!G.seenIntro) {
@@ -95,22 +117,22 @@ function startShop() {
     dlg("Welcome, boss",
       "Pop's old <b class='b'>Backyard Garage</b> is yours — one tired Street Stocker, rookie driver " +
       "<b class='b'>Rusty Axles</b>, and <b class='b'>Gus Grease</b> on the wrenches.<br><br>" +
-      "<span class='small'>· <b>Race</b> for purse money, fans and research data<br>" +
-      "· <b>Train</b> your driver and <b>upgrade</b> the machine<br>" +
-      "· <b>Sponsors</b> pay twice a year and unlock new gear<br>" +
-      "· Win a championship to earn a bigger garage</span>",
+      "<span class='small'>· The <b class='b'>card at the top</b> always tells you what to do next — tap its button.<br>" +
+      "· The <b class='b'>tabs</b> along the bottom are Team, Machines, Race, Develop and More.<br>" +
+      "· <b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap it to go faster or pause.<br>" +
+      "· Tap things in the shop — the car, the crew, the banner — to open their screen.<br><br>" +
+      "Before a race you pick <b>tyres and fuel</b>, and during it you call your own <b>pit stops</b>.</span>",
       [["Let's go racing", () => { closeDlg(); refreshObjective(); }]]);
   }
 }
 
 function boot() {
   initRender();
-  $("saveBtn").onclick = () => { if (MODE !== "shop") return; sfx("click"); toast(saveGame() ? "Game saved." : "Save failed — storage blocked."); };
+
   const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
   tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
   tab("tabShop", scrDevelop); tab("tabMore", openMenu);
-  $("drvPill").onclick = () => { if (MODE === "shop" && G && G.drivers.length) scrDriver(G.teams[G.curTeam].driver); };
-  $("clockPill").onclick = () => {
+  $("speedBtn").onclick = () => {
     if (!G) return; sfx("click");
     if (G.set.paused) { G.set.paused = false; G.set.speed = 1; }
     else if (G.set.speed === 1) G.set.speed = 2;
@@ -118,6 +140,17 @@ function boot() {
     updateChrome();
   };
   $("auraBtn").onclick = fireAura;
+  $("pitBtn").onclick = () => {
+    if (!R || R.phase !== "green") return;
+    sfx("click");
+    if (pitArmed()) { cancelPit(); return; }
+    dlg("Pit stop", "<div class='small'>What do you want done? A tyres-only or fuel-only stop is quicker " +
+      "than taking both.</div>",
+      [["Tyres", () => { closeAllDlg(); callPit("tyres"); }],
+       ["Fuel", () => { closeAllDlg(); callPit("fuel"); }],
+       ["Both", () => { closeAllDlg(); callPit("both"); }],
+       ["Stay out", () => closeAllDlg()]]);
+  };
   /* tapping the shop scene itself opens the matching screen */
   const canvasTap = ev => {
     if (MODE !== "shop" || dlgStack.length) return;

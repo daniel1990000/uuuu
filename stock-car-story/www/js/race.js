@@ -5,6 +5,20 @@
    ============================================================ */
 "use strict";
 
+/* ---------- race strategy ----------
+   Two decisions before the flag and one during it.  Enough to matter,
+   few enough to make on a phone without a manual.                     */
+const TYRES = {
+  soft:   { n: "Soft",   grip: 1.10, wear: 1.50, desc: "Clearly quickest, but they go off early — expect an extra stop." },
+  medium: { n: "Medium", grip: 1.00, wear: 1.00, desc: "The safe choice." },
+  hard:   { n: "Hard",   grip: 0.962, wear: 0.60, desc: "A shade slower, but they may save you a stop." },
+};
+const FUEL = {
+  light: { n: "Short fill", spd: 1.055, range: 0.60, desc: "Lighter and quicker — but you will stop again." },
+  full:  { n: "Full tank",  spd: 1.0,   range: 1.0,  desc: "Heavy early, but it goes the distance." },
+};
+let STRAT = { tyre: "medium", fuel: "full", aura: "none" };
+
 let R = null;          // live race
 let SEASON = null;     // live championship
 
@@ -16,10 +30,11 @@ function makeEntry(name, team, perf, col, num, opts) {
     name, team, perf, col, num,
     paintIdx: Math.max(0, TEAMC.indexOf(col)), model: "stock",
     isP: false, s: 0, lap: 0, v: 0, grid: 0, lane: 0, laneT: 0,
-    tyre: 100, fuel: 100, dur: 9999, maxdur: 9999,
+    tyreLife: 100, fuel: 100, dur: 9999, maxdur: 9999,
     pit: 0, stops: 0, pitMul: 1, fuelMul: 1, draftMul: 1, brake: 0,
     done: false, dnf: false, fin: 0, stagePts: 0, ledLaps: 0, best: 0,
     pace: 0, defend: 0, sbs: 0,
+    tyre: "medium", fuelPlan: "full", pitArmed: 0, pitKind: "both",
   }, opts || {});
 }
 
@@ -30,6 +45,7 @@ function buildField(track, season) {
   const perf = carPerf(car, track.surf) + driverPerf(drv, track.surf);
   const field = [makeEntry(drv.name, "YOUR TEAM", perf, TEAMC[car.paint % 8], car.num, {
     isP: true, dur: car.dur, maxdur: cs.maxdur,
+    tyre: STRAT.tyre, fuelPlan: STRAT.fuel,
     paintIdx: car.paint % 8, model: CHASSIS_MODEL[car.id] || "stock",
     pitMul: Math.max(0.45, 1 - cs.pit / 100 - shopTech() / 900),
     fuelMul: 1 + cs.fuel / 100, draftMul: 1 + cs.drv / 200,
@@ -61,6 +77,10 @@ function buildField(track, season) {
     const rc = cols[i % cols.length];
     field.push(makeEntry(name, team, str, rc, num,
       { pitMul: rnd(0.85, 1.15), fuelMul: rnd(0.95, 1.1), draftMul: rnd(0.95, 1.08),
+        /* rivals run a neutral plan: their difficulty already comes from the
+           strength band, so letting them stack compound bonuses on top would
+           just tax the player for a choice the AI never actually makes */
+        tyre: "medium", fuelPlan: "full",
         paintIdx: Math.max(0, TEAMC.indexOf(rc)),
         model: ["stock", "stock", "aero", "stock", "truck", "mod"][i % 6] }));
   }
@@ -174,7 +194,11 @@ function raceTick(dt) {
     const c = order[i];
     if (c.pit > 0) {                                  // serving a stop
       c.pit -= dt; c.v = 0;
-      if (c.pit <= 0) { c.tyre = 100; c.fuel = 100; c.stops++; }
+      if (c.pit <= 0) {
+        if (c.pitKind !== "fuel") c.tyreLife = 100;
+        if (c.pitKind !== "tyres") c.fuel = 100;
+        c.stops++;
+      }
       continue;
     }
     const sample = sampleTrack(tk, c.s);
@@ -182,10 +206,12 @@ function raceTick(dt) {
     const bank = sample.b;
 
     /* grip: tyres, corner tightness, banking helps, surface matters */
-    const grip = (0.80 + 0.20 * (c.tyre / 100)) * (1 + bank / 220);
+    const tset = TYRES[c.tyre] || TYRES.medium;
+    const fset = FUEL[c.fuelPlan] || FUEL.full;
+    const grip = (0.80 + 0.20 * (c.tyreLife / 100)) * (1 + bank / 220) * tset.grip;
     /* cornering cost: tight corners scrub speed unless handling is high */
     const cornerCost = curv * (1.0 - Math.min(0.55, c.perf / 340));
-    let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42);
+    let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42) * fset.spd;
     if (c.brake) target *= 1 + Math.min(0.05, c.brake / 400) * curv;
 
     /* drafting — real on the big ovals, mild on intermediates */
@@ -258,9 +284,9 @@ function raceTick(dt) {
     if (c.s >= tk.len) {
       c.s -= tk.len; c.lap++;
       if (c === R.leader) onLeaderLap();
-      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2);
-      const wearF = 100 / (track.laps * 0.80 * c.fuelMul);
-      c.tyre = Math.max(0, c.tyre - wearT * rnd(0.85, 1.15) * 0.55);
+      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2) * tset.wear;
+      const wearF = 100 / (track.laps * 0.80 * c.fuelMul * fset.range);
+      c.tyreLife = Math.max(0, c.tyreLife - wearT * rnd(0.85, 1.15) * 0.55);
       c.fuel = Math.max(0, c.fuel - wearF);
       if (c.isP) {
         /* a healthy car spends roughly a fifth of its durability per race,
@@ -273,14 +299,26 @@ function raceTick(dt) {
       } else if (Math.random() < 0.0035 && c.lap > 3) {
         c.dnf = true;                                  // rivals break too
       }
-      /* pit decision at the line */
+      /* pit decision at the line — yours is a call you make, theirs is not */
       const lapsLeft = track.laps - c.lap;
-      const needT = c.tyre < 26, needF = c.fuel < 14;
-      if ((needT || needF) && lapsLeft > 1) {
-        let stop = (c.isP ? Math.max(3.2, 7.5 - shopTech() / 46) : rnd(5.5, 8)) * c.pitMul;
+      const needT = c.tyreLife < 26, needF = c.fuel < 14;
+      let doStop = false;
+      if (c.isP) {
+        if (c.pitArmed) { doStop = true; c.pitArmed = 0; }
+        else if ((c.tyreLife < 26 || c.fuel < 15) && lapsLeft > 1) {
+          /* the crew will call you in rather than let you ruin the race —
+             calling it yourself, earlier and under caution, is the edge */
+          doStop = true; c.pitKind = "both";
+          banner("CREW CALLS YOU IN", 1.8);
+        }
+      } else if ((needT || needF) && lapsLeft > 1) { doStop = true; c.pitKind = "both"; }
+      if (doStop && lapsLeft >= 1) {
+        const base = c.isP ? Math.max(3.2, 7.5 - shopTech() / 46) : rnd(5.5, 8);
+        const kindMul = c.pitKind === "both" ? 1 : 0.62;
+        let stop = base * kindMul * c.pitMul;
         if (R.yellow) stop *= 0.55;
         c.pit = stop;
-        if (c.isP) banner("PIT ROAD — " + (needT ? "TYRES" : "FUEL"), 1.5);
+        if (c.isP) banner("PIT ROAD — " + c.pitKind.toUpperCase(), 1.5);
       }
       if (c.lap >= track.laps && !c.done) {
         c.done = true; c.fin = R.finish.length + 1; R.finish.push(c);
@@ -338,6 +376,27 @@ function fireAura() {
   banner("AURA — " + AURAS[R.auraTier].n.toUpperCase() + " BOOST!", 1.6);
   sfx("aura");
 }
+/* Arm a stop for the next time you cross the line. */
+function callPit(kind) {
+  if (!R || R.phase !== "green") return;
+  const me = R.field[0];
+  if (me.done || me.dnf) return;
+  me.pitKind = kind || "both";
+  me.pitArmed = 1;
+  banner("BOX THIS LAP — " + me.pitKind.toUpperCase(), 1.8);
+  sfx("ok");
+}
+function cancelPit() { if (R) { R.field[0].pitArmed = 0; banner("STAY OUT", 1.4); } }
+function pitArmed() { return !!(R && R.field[0].pitArmed); }
+
+/* running order for the HUD */
+function raceOrder() {
+  if (!R) return [];
+  const tk = R.tk;
+  return R.field.slice().sort((a, b) =>
+    (b.done ? 1e9 - b.fin : b.lap * tk.len + b.s) - (a.done ? 1e9 - a.fin : a.lap * tk.len + a.s));
+}
+
 function playerPos() {
   if (!R) return 1;
   const me = R.field[0];

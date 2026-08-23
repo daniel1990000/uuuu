@@ -401,7 +401,7 @@ function drawGarage() {
     isoBox(3.0, 3.0, 1.15, 1.15, 4, "#b8bfc8", "#8f97a1", "#a2aab4");
     const sz = Math.max(30, TW * 2.6);
     drawCarSprite(p.x, p.y - 8, -0.62, car.paint % 8, CHASSIS_MODEL[car.id] || "stock", sz);
-    tapLabel(p.x, p.y + 10 * PX + TH * 2.4, "#" + car.num + " " + car.name, "scrCars", sz * 1.2, sz);
+    tapLabel(p.x, p.y + 10 * PX + TH * 2.4, "Machine #" + car.num, "scrCars", sz * 1.2, sz);
   } });
 
   const staff = syncWalkers();
