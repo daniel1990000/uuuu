@@ -91,10 +91,25 @@ function drawTitle() {
   px(0, hz - 22, CW, 16, "#8f969f");
   for (let x = 2; x < CW; x += 3) for (let y = hz - 20; y < hz - 8; y += 3)
     px(x, y, 2, 2, ["#e8332a", "#2255cc", "#ffd23f", "#fff", "#3fae4a"][(x + y) % 5]);
-  /* hero car */
+  /* hero cars running down the front stretch */
   const carX = ((frame * 1.6) % (CW + 60)) - 30;
   cx.save(); cx.translate(carX, hz + 32); carSprite(cx, "#e8332a", true); cx.restore();
   cx.save(); cx.translate(carX - 22, hz + 26); carSprite(cx, "#2255cc", true); cx.restore();
+  cx.save(); cx.translate(carX - 44, hz + 34); carSprite(cx, "#e9a11b", true); cx.restore();
+  /* infield: pit wall, tyre stacks and trees so the foreground isn't bare */
+  px(0, hz + 44, CW, 3, "#c9d0da");
+  for (let i = 0; i < CW; i += 26) {
+    px(i + 3, hz + 48, 11, 4, "#1b1b1f"); px(i + 6, hz + 49, 5, 2, "#43434b");
+    px(i + 3, hz + 52, 11, 4, "#1b1b1f"); px(i + 6, hz + 53, 5, 2, "#43434b");
+  }
+  for (let i = 0; i < 5; i++) tree(8 + i * (CW / 4.2), CH - 22, 1);
+  /* haulers parked in the infield */
+  for (let i = 0; i < 3; i++) {
+    const hx = 12 + i * (CW / 3);
+    px(hx, CH - 44, 26, 9, ["#e6ebf2", "#c8d2de", "#eef1f6"][i]);
+    px(hx + 2, CH - 41, 14, 4, "#e8332a");
+    px(hx + 3, CH - 35, 5, 3, "#20232c"); px(hx + 18, CH - 35, 5, 3, "#20232c");
+  }
   /* logo */
   const ty = CH * 0.24;
   txt("STOCK CAR", CW / 2 + 1, ty + 1, "#101a45", 19, "center");
