@@ -432,6 +432,7 @@ function bakeTileCanvas(map, sub) {
 
 function buildTextures() {
   for (const k in TEX_MAPS) TEX[k] = bakeTileCanvas(TEX_MAPS[k]);
+  QUAD_PAT = new Map();
 }
 
 /* Recoloured variants — one authored tile serves every track by
@@ -515,11 +516,28 @@ function fillFlatTex(key, texel, fallback) {
    axes, so seat rows follow the rake and panel seams follow the
    curve of the wall.
    ============================================================ */
+/* One pattern object per texture, reused.  createPattern is the
+   expensive call here and a street circuit asks for it a hundred times
+   a frame — once per face of every city block.  The transform is set
+   immediately before each fill, so sharing the object is safe. */
+let QUAD_PAT = new Map();
+function quadPatternFor(key) {
+  let p = QUAD_PAT.get(key);
+  if (!p) {
+    const src = TEX[key];
+    if (!src) return null;
+    p = cx.createPattern(src, "repeat");
+    if (!p) return null;
+    QUAD_PAT.set(key, p);
+  }
+  return p;
+}
+
 function fillQuadTex(A, B, D, key, nu, nv, alpha) {
   const src = TEX[key];
   if (!src) return;
   const tw = src.width * nu, th = src.height * nv;
-  const p = cx.createPattern(src, "repeat");
+  const p = quadPatternFor(key);
   if (!p) return;
   try {
     p.setTransform(new DOMMatrix([
@@ -554,7 +572,7 @@ function stripTex(pts, width, key, texel, rise) {
     const len = Math.hypot(dx, dy);
     if (len < 0.01) continue;
     const ux = dx / len, uy = dy / len;
-    const p = cx.createPattern(src, "repeat");
+    const p = quadPatternFor(key);
     if (!p) break;
     const sx = texel, sy = texel;
     try {
@@ -583,4 +601,134 @@ function surfaceTex(track) {
   if (track.surf === "street") return "street";
   if (track.worn) return "asphaltWorn";
   return "asphalt";
+}
+
+/* ============================================================
+   UI CHROME — authored 9-slice frames.
+
+   The interface was CSS gradients and border-radius, which is the
+   one thing on screen that could never match the sprites.  These
+   are drawn pixel by pixel like everything else, baked to a data
+   URI at boot and handed to CSS as a border-image, so a button is
+   the same material as a car.
+   ============================================================ */
+const UIP = {
+  o: "#16181d",   // outline
+  w: "#ffffff",   // top highlight
+  f: "#f4f7fb",   // face
+  e: "#dbe3f1",   // face shade
+  s: "#a9b4c7",   // bottom shadow
+  W: "#ffe9a8",   // gold highlight
+  F: "#ffd23f",   // gold face
+  E: "#f0b02b",   // gold shade
+  S: "#c98a12",   // gold shadow
+  R: "#ff8d84", r: "#e8332a", X: "#b81f17",   // red
+  G: "#7fe08a", g: "#3fae4a", H: "#25772f",   // green
+  N: "#1e2a52", n: "#101838", M: "#3c50b0",   // navy panel
+};
+
+/* Raised button, 16x16 with a 5px slice.
+
+   The centre six rows and columns are a single flat tone on purpose:
+   border-image repeats that region across the whole button, so any
+   shading left inside it comes out as stripes down the face.  All the
+   depth therefore lives in the outer five pixels, where the corners
+   are drawn once and the edges only ever run in one direction. */
+const UI_BTN = [
+  "...oooooooooo...",
+  ".ooowwwwwwwwooo.",
+  ".owwffffffffwwo.",
+  "owwffffffffffwwo",
+  "owffffffffffffwo",
+  "offffffffffffffo",
+  "offffffffffffffo",
+  "offffffffffffffo",
+  "offffffffffffffo",
+  "offffffffffffffo",
+  "offffffffffffffo",
+  "oeeeeeeeeeeeeeeo",
+  "osseeeeeeeeeesso",
+  ".osssssssssssso.",
+  ".ooossssssssooo.",
+  "...oooooooooo...",
+];
+
+/* Pressed: highlight and shadow swap, so the face sinks into the frame. */
+const UI_BTN_DOWN = [
+  "...oooooooooo...",
+  ".ooossssssssooo.",
+  ".osssseeeeessso.",
+  "osseeeeeeeeeesso",
+  "oseeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "oeeeeeeeeeeeeeeo",
+  "offffffffffffffo",
+  "owffffffffffffwo",
+  ".owwffffffffwwo.",
+  ".ooowwwwwwwwooo.",
+  "...oooooooooo...",
+];
+
+/* Recolour a 9-slice by swapping its five tone entries.  One authored
+   frame therefore serves the plain, gold, red, green and navy buttons
+   rather than five near-identical grids. */
+const UI_TONES = {
+  plain: {},
+  gold:  { w: UIP.W, f: UIP.F, e: UIP.E, s: UIP.S },
+  red:   { w: UIP.R, f: UIP.r, e: UIP.r, s: UIP.X },
+  green: { w: UIP.G, f: UIP.g, e: UIP.g, s: UIP.H },
+  navy:  { w: UIP.M, f: UIP.N, e: UIP.N, s: UIP.n },
+};
+
+/* Bake a UI map to a data URI at `scale` device pixels per art pixel. */
+function bakeUI(map, tone, scale) {
+  const w = map[0].length, h = map.length;
+  const c = document.createElement("canvas");
+  c.width = w * scale; c.height = h * scale;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  const sub = UI_TONES[tone] || {};
+  for (let r = 0; r < h; r++) {
+    const row = map[r];
+    for (let col = 0; col < w; col++) {
+      const ch = row[col];
+      if (!ch || ch === ".") continue;
+      g.fillStyle = sub[ch] || UIP[ch] || "#f0f";
+      g.fillRect(col * scale, r * scale, scale, scale);
+    }
+  }
+  return c.toDataURL("image/png");
+}
+
+/* Push the baked frames into the document as border-image rules.  CSS
+   cannot author pixel art, but it can wear it. */
+function buildUIChrome() {
+  const SC = 2;                       // device pixels per authored pixel
+  const SL = 5 * SC;                  // the 9-slice corner
+  const url = (m, t) => 'url("' + bakeUI(m, t, SC) + '")';
+  const frame = (sel, map, tone) =>
+    sel + "{border-style:solid;border-width:" + SL + "px;border-image:" +
+    url(map, tone) + " " + SL + " fill stretch;background:none;border-radius:0}";
+
+  const css = [
+    /* the frame replaces the gradient, the radius and the drop shadow */
+    frame(".pill", UI_BTN, "plain"),
+    frame(".pill:active", UI_BTN_DOWN, "plain"),
+    frame(".pill.gold", UI_BTN, "gold"),
+    frame(".pill.go", UI_BTN, "green"),
+    frame(".pill.warn", UI_BTN, "red"),
+    ".pill{box-shadow:none;padding:5px 7px}",
+    ".pill:active{transform:none;box-shadow:none}",
+    ".dlg .bt .pill{padding:9px 8px}",
+    ".row > .pill{padding:7px 8px}",
+  ].join("\n");
+
+  const st = document.createElement("style");
+  st.id = "uiChrome";
+  st.textContent = css;
+  document.head.appendChild(st);
 }
