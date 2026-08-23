@@ -48,13 +48,19 @@ function dlg(title, body, buttons) {
   $("dim").style.display = "block";
   $("sceneWrap").appendChild(d);
   dlgStack.push(d);
+  /* lets the toast drop below a sheet's title bar instead of sitting on it */
+  $("app").classList.add("sheeting");
   d.querySelector(".x").onclick = () => { sfx("click"); closeAllDlg(); };
   d.querySelector(".bd").scrollTop = 0;
   return d;
 }
 function closeDlg() {
   const d = dlgStack.pop(); if (d) d.remove();
-  if (!dlgStack.length) { $("dim").style.display = "none"; if (typeof refreshObjective === "function") refreshObjective(); }
+  if (!dlgStack.length) {
+    $("dim").style.display = "none";
+    $("app").classList.remove("sheeting");
+    if (typeof refreshObjective === "function") refreshObjective();
+  }
 }
 function closeAllDlg() { while (dlgStack.length) closeDlg(); }
 function toast(msg) {
@@ -111,6 +117,34 @@ function auraPicker(cb, verb) {
 /* ============================================================
    MAIN MENU
    ============================================================ */
+function scrHelp() {
+  closeAllDlg();
+  dlg("How to play",
+    "<h4>The loop</h4><div class='small'>Race for prize money, fans and research data. " +
+    "Spend money on staff, machines and parts; spend research data on upgrades. " +
+    "Win a championship to earn a bigger garage, then move up the ladder.</div>" +
+    "<h4>Getting around</h4><div class='small'>The <b class='b'>card at the top</b> always says what to do next — " +
+    "tap its button. The <b class='b'>tabs</b> along the bottom are your five screens. " +
+    "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap to speed up or pause. " +
+    "You can also tap the car, the crew, the banner or the bench in the shop.</div>" +
+    "<h4>Race day</h4><div class='small'>Pick <b>tyres</b> (grip against wear) and <b>fuel</b> " +
+    "(weight against range) before the flag. During the race the <b class='b'>PIT</b> button calls your stop — " +
+    "tyres, fuel or both. A partial stop is quicker, and stopping under caution costs about half the time. " +
+    "If you never call one, the crew will bring you in before the tyres are gone.</div>" +
+    "<h4>Auras</h4><div class='small'>One-shot boosts earned from first podiums, titles and driver levels. " +
+    "Spend them on a race, a build, a part fitting, an upgrade or a training session — " +
+    "the upgrade is usually the best value because it is permanent.</div>" +
+    "<h4>Durability</h4><div class='small'>A machine loses about a fifth of its durability per race. " +
+    "Repair it before it blows up — the objective card will tell you when.</div>" +
+    "<h4>Reading the numbers</h4><div class='small'>Drivers: <b>Pd</b> pedal (throttle down the straights), " +
+    "<b>Sh</b> shift (getting off the corner) and <b>St</b> steer (holding a line). " +
+    "Short tracks lean on steer, superspeedways on pedal.<br>" +
+    "Everyone also carries <b>Ap</b> appeal, <b>Tc</b> tech and <b>An</b> analysis: appeal pulls fans and " +
+    "sponsors, tech decides how well the shop builds a machine, analysis is how fast research data comes in. " +
+    "Crew count triple on those three, drivers only half — so hire crew for the shop, drivers for the track.<br>" +
+    "Machines: <b>Sp</b> top speed, <b>Ac</b> acceleration, <b>Hd</b> handling.</div>",
+    [["Got it", () => closeAllDlg()]]);
+}
 function saveNow() {
   sfx("click");
   toast(saveGame() ? "Game saved." : "Save failed — storage is blocked.");
@@ -118,16 +152,15 @@ function saveNow() {
 }
 function openMenu() {
   sfx("click");
+  /* The tab bar already covers Team, Machines, Race and Develop, so this
+     holds only what has nowhere else to live. */
   const items = [
-    ["Team", "scrTeam", "👥"], ["Machines", "scrCars", "🏎"], ["Training", "scrTrain", "🏋"],
-    ["Research", "scrResearch", "🔬"], ["Parts", "scrParts", "🔧"], ["Sponsors", "scrSponsors", "📣"],
-    ["Enter Race", "scrRaces", "🏁"], ["Records", "scrRecords", "🏆"],
-    ["Auras", "scrAuras", "✨"], ["Sponsors", "scrSponsors", "📣"],
-    ["Save Game", "saveNow", "💾"], ["Options", "scrOptions", "⚙"]];
+    ["Training", "scrTrain", "🏋"], ["Sponsors", "scrSponsors", "📣"],
+    ["Records", "scrRecords", "🏆"], ["Auras", "scrAuras", "✨"],
+    ["How to play", "scrHelp", "❓"], ["Save Game", "saveNow", "💾"],
+    ["Options", "scrOptions", "⚙"]];
   const badge = (f) => {
-    if (f === "scrRaces" && !SEASON) return "";
     if (f === "scrSponsors" && G.offers.length && G.sponsors.length < 2) return "<i class='dot'></i>";
-    if (f === "scrResearch" && (availableCarBlueprints().length || availablePartBlueprints().length)) return "<i class='dot'></i>";
     if (f === "scrAuras" && anyAura()) return "<i class='dot'></i>";
     return "";
   };
@@ -596,7 +629,7 @@ function scrRaces() {
     h += "<div class='row'><div class='f1'><b class='b'>" + sd.n + "</b>" + (G.seriesWon[sd.id] ? " <span class='chip gold'>WON</span>" : "") +
       "<div class='small dim'>" + sd.tracks.length + " rounds · entry " + fmtK(sd.fee) + " · champion " + fmtK(sd.purse[0]) + "</div></div>" +
       (SEASON ? "<span class='chip'>busy</span>" : ok ? "<button class='pill' onclick=\"startSeason('" + sd.id + "')\">Enter</button>" :
-        "<span class='chip'>Garage " + sd.req.garage + "</span>") + "</div>";
+        "<span class='chip'>\uD83D\uDD12 Needs Garage " + sd.req.garage + "</span>") + "</div>";
   });
   h += "<h4>Single Races</h4>";
   TRACKS.forEach(tr => {
@@ -849,7 +882,8 @@ function scrDevelop() {
     h += "<h4>Race machine</h4><div class='row'>" + carIcon(car) +
       "<div class='f1'><b class='b'>#" + car.num + " " + esc(car.name) + "</b> " + libTag("car", car.id) +
       "<div class='small dim'>Sp" + Math.floor(s.spd) + " Ac" + Math.floor(s.acc) + " Hd" + Math.floor(s.hdl) +
-      " · parts " + car.parts.length + "/" + s.exp + "</div>" +
+      " · parts " + car.parts.length + "/" + s.exp +
+      " · condition " + Math.round(100 * car.dur / s.maxdur) + "%</div>" +
       bar(100 * car.dur / s.maxdur, car.dur < s.maxdur * 0.35 ? "d" : "") + "</div></div>";
   }
   h += "<div class='small dim' style='margin-top:8px'>Upgrades in Research are permanent — they raise every machine you build from that blueprint, and they carry into New Game+.</div>";

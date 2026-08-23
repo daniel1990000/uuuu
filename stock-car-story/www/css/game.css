@@ -20,8 +20,13 @@ body{font-family:'Press Start 2P','Courier New',monospace;font-size:13px;color:v
 #dateLcd{color:var(--gold);font-size:10px;text-shadow:1px 1px 0 #000}
 #rpBox{color:#7fd4ff}
 #fanBox{color:#ff9ecb}
-#moneyBox{flex:1;background:#fff;border:2px solid #000;border-radius:8px;padding:4px 6px;
-  text-align:right;color:#146c2e;overflow:hidden;white-space:nowrap;font-size:10px}
+/* Each readout says what it is.  A bare number in a corner teaches nobody
+   which currency it is, and the cash box was a wide empty slab besides. */
+#fanBox::before{content:"FANS ";color:#a8748f}
+#moneyBox{flex:1;min-width:0;background:#fff;border:2px solid #000;border-radius:8px;
+  padding:5px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  color:#146c2e;overflow:hidden;white-space:nowrap;font-size:10px}
+#moneyBox::before{content:"CASH";color:#9aa3b8;font-size:8px;flex:0 0 auto}
 .pill{background:linear-gradient(#fff,#dde4f2);border:2px solid #000;border-radius:12px;
   font-family:inherit;font-size:9px;color:#12203a;padding:9px 9px;box-shadow:0 2px 0 #0a1130;
   white-space:nowrap;cursor:pointer;line-height:1.4}
@@ -66,12 +71,16 @@ canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
 @keyframes slideup{from{transform:translateY(14px);opacity:.3}}
 @media (prefers-reduced-motion:reduce){.dlg{animation:none}}
 .dlg .ttl{background:linear-gradient(#ff7a6e,var(--red));color:#fff;text-align:center;
-  padding:14px 46px;border-bottom:3px solid #000;font-size:14px;
+  padding:16px 60px;border-bottom:3px solid #000;font-size:14px;
   text-shadow:1px 1px 0 #7a0000;position:relative;flex:0 0 auto}
-.dlg .ttl .x{position:absolute;right:7px;top:7px;width:38px;height:38px;
-  background:rgba(0,0,0,.28);border:2px solid rgba(0,0,0,.5);border-radius:10px;
-  color:#fff;font-family:inherit;font-size:14px;line-height:1;cursor:pointer}
-.dlg .ttl .x:active{transform:translateY(2px)}
+/* 46px square: comfortably over the 44px minimum touch target, and the
+   flex centring keeps the glyph optically middled however the font renders. */
+.dlg .ttl .x{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:46px;height:46px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.28);border:2px solid rgba(0,0,0,.5);border-radius:12px;
+  color:#fff;font-family:inherit;font-size:15px;line-height:1;cursor:pointer;
+  padding:0;-webkit-tap-highlight-color:transparent}
+.dlg .ttl .x:active{transform:translateY(-50%) scale(.93);background:rgba(0,0,0,.45)}
 .dlg .bd{padding:10px 10px 14px;overflow-y:auto;line-height:1.7;flex:1;
   -webkit-overflow-scrolling:touch}
 .dlg .bt{display:flex;gap:7px;padding:8px 8px calc(env(safe-area-inset-bottom) * .35 + 8px);
@@ -136,10 +145,18 @@ table.t tr.me{background:#fff6ce}
 .bigwin{text-align:center;font-size:15px;color:#177a29;margin:8px 0}
 .bigpos{text-align:center;font-size:15px;color:var(--blue);margin:8px 0}
 .score{text-align:center;font-size:22px;color:#177a29;margin:8px 0}
-#toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:20;
+/* Toasts drop in from the top like an Android notification.  Centred on the
+   screen they sat right on top of whatever list you were reading; anchored
+   here they clear both the sheet footer and the tab bar. */
+#toast{position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;
+  transform:translateX(-50%);z-index:40;pointer-events:none;
   background:rgba(10,17,48,.96);color:#fff;border:3px solid #000;border-radius:10px;
   padding:11px 14px;font-size:11px;display:none;max-width:90%;text-align:center;line-height:1.7;
-  box-shadow:0 3px 0 rgba(0,0,0,.4)}
+  box-shadow:0 4px 0 rgba(0,0,0,.4);animation:toastin .18s cubic-bezier(.2,.9,.3,1)}
+@keyframes toastin{from{transform:translateX(-50%) translateY(-14px);opacity:0}}
+@media (prefers-reduced-motion:reduce){#toast{animation:none}}
+/* with a sheet open the title bar owns that strip, so drop below it */
+#app.sheeting #toast{top:calc(env(safe-area-inset-top) + 118px)}
 
 
 /* ---------- objective card: always says what to do next ---------- */
@@ -157,10 +174,11 @@ table.t tr.me{background:#fff6ce}
 /* ---------- tab bar ---------- */
 #tabbar{display:flex;gap:4px;padding:5px 5px 0;background:var(--navy3);
   border-top:3px solid #000;flex:0 0 auto;z-index:6}
-.tab{flex:1;background:linear-gradient(#59657f,#3c465c);border:2px solid #000;
+.tab{flex:1;min-width:0;background:linear-gradient(#59657f,#3c465c);border:2px solid #000;
   border-bottom:none;border-radius:10px 10px 0 0;color:#e8eefc;font-family:inherit;
-  font-size:9px;padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;
-  gap:4px;cursor:pointer;position:relative;min-height:52px;justify-content:center}
+  font-size:9px;padding:9px 1px 8px;display:flex;flex-direction:column;align-items:center;
+  gap:4px;cursor:pointer;position:relative;min-height:56px;justify-content:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tab span{font-size:17px;line-height:1}
 .tab:active{transform:translateY(2px)}
 .tab.hot{background:linear-gradient(#ffdf7a,#f0a92b);color:#3a2400;border-color:#000}

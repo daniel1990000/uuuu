@@ -401,7 +401,6 @@ function drawGarage() {
     isoBox(3.0, 3.0, 1.15, 1.15, 4, "#b8bfc8", "#8f97a1", "#a2aab4");
     const sz = Math.max(30, TW * 2.6);
     drawCarSprite(p.x, p.y - 8, -0.62, car.paint % 8, CHASSIS_MODEL[car.id] || "stock", sz);
-    tapLabel(p.x, p.y + 10 * PX + TH * 2.4, "Machine #" + car.num, "scrCars", sz * 1.2, sz);
   } });
 
   const staff = syncWalkers();
@@ -427,20 +426,15 @@ function drawGarage() {
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.f();
 
-  /* tappable people: whoever is standing furthest forward gets the label */
-  {
-    const a = iso(0.5, 4.8);                       // by the tyre stacks, front-left
-    tapLabel(a.x + 6 * PX, a.y + 4 * PX, "Team", "scrTeam", 46 * (PX / 2), 30 * (PX / 2));
-  }
-  {
-    const a = iso(1.4, -0.5);                      // the banner, high on the wall
-    tapLabel(a.x, a.y - WH + 26 * (PX / 2), G.sponsors.length ? "Sponsors" : "Get a sponsor",
-      "scrSponsors", 86 * (PX / 2), 26 * (PX / 2));
-  }
-  {
-    const a = iso(5.4, 0.6);                       // by the bench, back-right
-    tapLabel(a.x - 4 * PX, a.y + 4 * PX, "Develop", "scrDevelop", 60 * (PX / 2), 30 * (PX / 2));
-  }
+  /* Fixed anchors around the room, so labels never collide with each other,
+     with the machine, or with the staff. */
+  const roomTop = ISO.oy - WH - 4 * PX;
+  const roomBot = ISO.oy + ROOM * 2 * TH + 2 * PX;
+  tapLabel(CW * 0.21, roomTop, "Team", "scrTeam", 58 * (PX / 2), 30 * (PX / 2));
+  tapLabel(CW * 0.79, roomTop, G.sponsors.length ? "Sponsors" : "Get a sponsor",
+    "scrSponsors", 92 * (PX / 2), 30 * (PX / 2));
+  tapLabel(CW * 0.21, roomBot, "Build", "scrDevelop", 58 * (PX / 2), 30 * (PX / 2));
+  if (car) tapLabel(CW * 0.79, roomBot, "Machine #" + car.num, "scrCars", 92 * (PX / 2), 30 * (PX / 2));
 
   /* --- the yard in front of the shop, laid out proportionally so it
          always fills whatever space is left below the building --- */
@@ -490,22 +484,25 @@ function drawGarage() {
   tree(14 * u, ry - 2 * u, 1, "pine");
   tree(CW - 14 * u, ry - 2 * u, 1, "pine");
 
-  /* status bubbles */
-  let by = Math.round(CH * 0.36) - 66;
+  /* status bubbles pinned to the top-left of the scene */
+  let by = 5 * PX;
   const bubble = (s, col) => {
-    cx.font = "bold 7px monospace";
-    const w = cx.measureText(s).width + 10;
-    px(6, by, w, 14, "#ffffff"); px(6, by, w, 2, "#dfe6f2");
-    cx.strokeStyle = "#20232c"; cx.lineWidth = 1; cx.strokeRect(6.5, by + 0.5, w - 1, 13);
-    px(12, by + 14, 5, 3, "#ffffff");
-    txt(s, 11, by + 10, col, 7);
-    by += 19;
+    cx.font = "bold " + Math.round(7 * PX) + "px monospace";
+    const w = cx.measureText(s).width + 11 * PX;
+    px(5 * PX, by, w, 12 * PX, "#ffffff");
+    cx.strokeStyle = "#20232c"; cx.lineWidth = 1 * (PX / 2);
+    cx.strokeRect(5 * PX + 0.5, by + 0.5, w - 1, 12 * PX - 1);
+    px(5 * PX, by, 3 * (PX / 2), 12 * PX, col);
+    txt(s, 5 * PX + 7 * (PX / 2), by + 8.5 * PX, "#20232c", 7);
+    by += 15 * PX;
   };
-  if (G.build) bubble("Building " + G.build.wks + "w", "#2255cc");
-  if (G.repair) bubble("Repair " + G.repair.wks + "w", "#e8332a");
-  if (car && car.dur < carStats(car).maxdur * 0.35) bubble("Machine damaged!", "#e8332a");
-  if (!G.build && !G.repair && G.rp >= 40) bubble("Research ready", "#1a8a2e");
-  if (G.offers.length && G.sponsors.length < 2) bubble("Sponsor offer!", "#c47b00");
+  if (G.build) bubble("Building - " + G.build.wks + "w left", "#2255cc");
+  if (G.repair) bubble("Repairing - " + G.repair.wks + "w left", "#e8332a");
+  if (car && car.dur < carStats(car).maxdur * 0.35) bubble("Machine damaged", "#e8332a");
+  if (!G.build && !G.repair && G.rp >= 40) bubble("Research available", "#1a8a2e");
+  if (G.offers.length && G.sponsors.length < 2) bubble("Sponsor offer waiting", "#c47b00");
+
+  flushLabels();
 }
 
 /* ============================================================
@@ -704,8 +701,15 @@ function drawScenery(tk, HALF, d0, d1) {
 
 /* A labelled, tappable spot in the shop.  The label is what turns a
    pretty scene into something a player can actually operate.        */
+let LABELQ = [];
 function tapLabel(x, y, text, action, w, h) {
   HOTSPOTS.push({ x: x - w / 2, y: y - h, w, h, action });
+  LABELQ.push({ x, y, text });
+}
+/* Painted after the whole scene, so a chibi walking past can never end up
+   on top of a label. */
+function flushLabels() { for (const l of LABELQ) paintLabel(l.x, l.y, l.text); LABELQ = []; }
+function paintLabel(x, y, text) {
   cx.font = "bold " + Math.round(7 * PX) + "px monospace";
   const tw = cx.measureText(text).width + 8 * PX;
   const bx = Math.round(x - tw / 2), by = Math.round(y);
