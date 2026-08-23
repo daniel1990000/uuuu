@@ -196,8 +196,19 @@ where the answer to "what now?" is hidden in a menu.
 
 **A real tab bar.** Five permanent tabs — Team, Machines, Race, Develop, More —
 each a 52px touch target, with a red dot when something is waiting behind it.
-Develop groups research, parts, building and training, which are otherwise four
-separate trips through a menu.
+Screens open as full-screen sheets *inside the scene area*, so the tab bar stays
+visible and reachable underneath: switching section is always one tap, never a
+trip back through a menu. Each sheet has a large ✕ in its header and a Close
+button in a sticky footer, and both return you to the shop rather than to a menu
+you never opened.
+
+**Research reads as three steps**, because that is what it is: ① research a
+blueprint with research data, ② build or buy the thing with money, ③ upgrade the
+blueprint with research data — permanent, and the gate on the next tier. The
+screen is segmented into Machines / Parts / Garage so none of it needs scrolling
+past the others, every entry carries its rank, effects and cost, and locked
+entries state their requirement. The Parts screen draws the machine's slots as
+boxes, so an empty slot is obvious and a fitted part is one tap to remove.
 
 **A tappable shop.** The garage is not a picture. The machine on the lift, the
 crew on the floor, the sponsor banner and the tool bench each carry a floating

@@ -56,52 +56,91 @@ canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
 #auraBtn:active{transform:translateY(3px);box-shadow:none}
 #auraBtn:disabled{filter:grayscale(1);opacity:.45}
 
-/* ---------- dialogs ---------- */
-#dim{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:10;display:none}
-.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:11;
-  width:min(94%,440px);max-height:88%;display:flex;flex-direction:column;background:var(--panel);
-  border:3px solid #000;border-radius:10px;box-shadow:0 6px 0 rgba(0,0,0,.35);animation:pop .12s ease-out}
-@keyframes pop{from{transform:translate(-50%,-50%) scale(.94);opacity:.4}}
-.dlg .ttl{background:linear-gradient(#ff7a6e,var(--red));color:#fff;text-align:center;padding:8px;
-  border-radius:6px 6px 0 0;border-bottom:3px solid #000;font-size:10px;text-shadow:1px 1px 0 #7a0000}
-.dlg .bd{padding:9px;overflow-y:auto;line-height:1.75;-webkit-overflow-scrolling:touch}
-.dlg .bt{display:flex;gap:6px;padding:7px;border-top:2px solid var(--line);flex-wrap:wrap}
-.dlg .bt .pill{flex:1;text-align:center;min-width:74px}
-h4{font-size:9px;color:#5a6478;margin:9px 0 4px;border-bottom:2px solid var(--line);padding-bottom:3px}
-.b{color:var(--blue)} .r{color:var(--red)} .g{color:#1a8a2e} .dim{color:#7d879b}
+/* ---------- sheets ----------
+   A management game on a phone needs full-screen panels with big rows,
+   not a small centred dialog.  Sheets fill the scene area and leave the
+   tab bar reachable underneath, so you can switch section in one tap. */
+#dim{position:absolute;inset:0;background:rgba(4,8,24,.5);z-index:10;display:none}
+.dlg{position:absolute;inset:0;z-index:11;display:flex;flex-direction:column;
+  background:#eef2f9;border:none;border-radius:0;box-shadow:none;
+  animation:slideup .16s cubic-bezier(.2,.8,.3,1)}
+@keyframes slideup{from{transform:translateY(14px);opacity:.3}}
+@media (prefers-reduced-motion:reduce){.dlg{animation:none}}
+.dlg .ttl{background:linear-gradient(#ff7a6e,var(--red));color:#fff;text-align:center;
+  padding:14px 46px;border-bottom:3px solid #000;font-size:14px;
+  text-shadow:1px 1px 0 #7a0000;position:relative;flex:0 0 auto}
+.dlg .ttl .x{position:absolute;right:7px;top:7px;width:38px;height:38px;
+  background:rgba(0,0,0,.28);border:2px solid rgba(0,0,0,.5);border-radius:10px;
+  color:#fff;font-family:inherit;font-size:14px;line-height:1;cursor:pointer}
+.dlg .ttl .x:active{transform:translateY(2px)}
+.dlg .bd{padding:10px 10px 14px;overflow-y:auto;line-height:1.7;flex:1;
+  -webkit-overflow-scrolling:touch}
+.dlg .bt{display:flex;gap:7px;padding:8px 8px calc(env(safe-area-inset-bottom) * .35 + 8px);
+  border-top:3px solid #000;background:linear-gradient(#dfe6f4,#c8d2e6);flex-wrap:wrap;flex:0 0 auto}
+.dlg .bt .pill{flex:1;text-align:center;min-width:96px;font-size:12px;padding:15px 10px}
+
+h4{font-size:12px;color:#46506a;margin:14px 0 6px;border-bottom:3px solid #c2cbe0;
+  padding-bottom:5px;letter-spacing:.5px}
+h4:first-child{margin-top:2px}
+.b{color:var(--blue)} .r{color:var(--red)} .g{color:#177a29} .dim{color:#69738c}
 .f1{flex:1;min-width:0}
-.small{font-size:8px;line-height:1.65}
-.row{display:flex;align-items:center;gap:6px;padding:6px 3px;border-bottom:1px solid #e4e9f2}
-.row:active{background:#eef3ff}
-.mg{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.mg .pill{text-align:center;padding:12px 4px}
-.pill.mi{display:flex;align-items:center;gap:7px;justify-content:flex-start;padding-left:10px;position:relative}
-.pill.mi .ico{font-size:13px;line-height:1;filter:saturate(1.1)}
-.pill.mi .dot{position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;
-  background:var(--red);border:1px solid #000;animation:pulse 1.2s ease-in-out infinite}
+.small{font-size:11px;line-height:1.6}
+.row{display:flex;align-items:center;gap:9px;padding:10px 8px;min-height:58px;
+  background:#fff;border:2px solid #cdd6e8;border-radius:11px;margin-bottom:7px}
+.row:active{background:#eaf1ff}
+.row > .pill{padding:13px 12px;font-size:11px;min-width:74px;text-align:center}
+.mg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mg .pill{text-align:center;padding:18px 6px;font-size:12px}
+.pill.mi{display:flex;align-items:center;gap:9px;justify-content:flex-start;
+  padding-left:12px;position:relative}
+.pill.mi .ico{font-size:19px;line-height:1}
+.pill.mi .dot{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;
+  background:var(--red);border:2px solid #000;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.pill.mi .dot{animation:none}}
-.chip{display:inline-block;border:2px solid #000;border-radius:6px;padding:1px 4px;font-size:7px;
-  background:#e8eefc;color:#1e3358;vertical-align:middle}
+
+/* segmented control inside a sheet */
+.seg{display:flex;gap:6px;margin:2px 0 10px}
+.seg button{flex:1;background:linear-gradient(#fff,#dde4f2);border:2px solid #000;
+  border-radius:10px;font-family:inherit;font-size:11px;padding:12px 4px;color:#12203a;
+  box-shadow:0 2px 0 #0a1130;cursor:pointer}
+.seg button.on{background:linear-gradient(#ffdf7a,#f0a92b);color:#3a2400}
+.seg button:active{transform:translateY(2px);box-shadow:none}
+
+/* part slots on the machine */
+.slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.slot{width:60px;height:46px;border:2px dashed #93a0bd;border-radius:9px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:8px;color:#69738c;text-align:center;padding:2px;background:#f4f7fc}
+.slot.on{border-style:solid;border-color:#1a8a2e;background:#e6f7e9;color:#0f5a1f}
+.slot b{font-size:8px;display:block;line-height:1.25}
+
+.chip{display:inline-block;border:2px solid #000;border-radius:7px;padding:2px 6px;
+  font-size:10px;background:#e8eefc;color:#1e3358;vertical-align:middle}
 .chip.gold{background:var(--gold)} .chip.lv{background:#dff0dd;color:#1a5c28}
-.bar{height:8px;background:#d3dae8;border:2px solid #000;border-radius:4px;overflow:hidden;margin-top:3px}
+.chip.rank{background:#2b3550;color:#ffd23f;min-width:22px;text-align:center}
+.bar{height:11px;background:#d3dae8;border:2px solid #000;border-radius:5px;overflow:hidden;margin-top:4px}
 .bar i{display:block;height:100%;background:linear-gradient(#8ef08a,var(--green))}
 .bar.e i{background:linear-gradient(#ffe98a,#f5a623)}
 .bar.d i{background:linear-gradient(#ff9a92,#e8332a)}
-.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 6px;font-size:8px;margin-top:4px}
-.sg b{color:var(--blue);font-size:9px}
-table.t{width:100%;border-collapse:collapse;font-size:8px}
-table.t td,table.t th{padding:3px 3px;border-bottom:1px solid #e4e9f2;text-align:left}
-table.t th{color:#7d879b;font-size:7px}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 8px;font-size:11px;margin-top:6px}
+.sg b{color:var(--blue);font-size:13px}
+table.t{width:100%;border-collapse:collapse;font-size:11px;background:#fff;
+  border:2px solid #cdd6e8;border-radius:10px;overflow:hidden}
+table.t td,table.t th{padding:8px 6px;border-bottom:1px solid #e4e9f2;text-align:left}
+table.t th{color:#69738c;font-size:10px;background:#f2f6fd}
 table.t tr.me{background:#fff6ce}
-.face{width:22px;height:26px;image-rendering:pixelated;border:2px solid #000;border-radius:4px;flex:0 0 auto}
-.cicon{width:34px;height:20px;image-rendering:pixelated;border:2px solid #000;border-radius:4px;flex:0 0 auto}
-.bigwin{text-align:center;font-size:12px;color:#1a8a2e;margin:4px 0}
-.bigpos{text-align:center;font-size:12px;color:var(--blue);margin:4px 0}
-.score{text-align:center;font-size:17px;color:#1a8a2e;margin:6px 0}
-#toast{position:absolute;top:13%;left:50%;transform:translateX(-50%);z-index:20;
-  background:rgba(10,17,48,.95);color:#fff;border:2px solid #000;border-radius:8px;padding:8px 11px;
-  font-size:8px;display:none;max-width:88%;text-align:center;line-height:1.7}
+.face{width:38px;height:46px;image-rendering:pixelated;border:2px solid #000;
+  border-radius:7px;flex:0 0 auto}
+.cicon{width:58px;height:34px;image-rendering:pixelated;border:2px solid #000;
+  border-radius:7px;flex:0 0 auto}
+.bigwin{text-align:center;font-size:15px;color:#177a29;margin:8px 0}
+.bigpos{text-align:center;font-size:15px;color:var(--blue);margin:8px 0}
+.score{text-align:center;font-size:22px;color:#177a29;margin:8px 0}
+#toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:20;
+  background:rgba(10,17,48,.96);color:#fff;border:3px solid #000;border-radius:10px;
+  padding:11px 14px;font-size:11px;display:none;max-width:90%;text-align:center;line-height:1.7;
+  box-shadow:0 3px 0 rgba(0,0,0,.4)}
 
 
 /* ---------- objective card: always says what to do next ---------- */
@@ -133,18 +172,4 @@ table.t tr.me{background:#fff6ce}
 #clockPill{min-width:86px}
 
 /* bigger, friendlier dialogs on a phone */
-.dlg{width:min(96%,520px)}
-.dlg .ttl{font-size:13px;padding:11px}
-.dlg .bd{padding:11px;font-size:12px}
-.dlg .bt .pill{font-size:11px;padding:13px 10px;min-width:88px}
-h4{font-size:11px;margin:12px 0 6px}
-.small{font-size:10px}
-.chip{font-size:9px;padding:2px 5px}
-.sg{font-size:10px} .sg b{font-size:12px}
-table.t{font-size:10px} table.t th{font-size:9px}
-.row{padding:9px 4px;min-height:44px}
-.mg .pill{padding:15px 4px;font-size:11px}
-.pill.mi .ico{font-size:16px}
-.face{width:30px;height:36px}
-.cicon{width:46px;height:27px}
 #toast{font-size:11px;padding:11px 14px}
