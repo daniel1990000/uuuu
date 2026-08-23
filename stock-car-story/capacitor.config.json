@@ -1,0 +1,32 @@
+{
+  "appId": "com.yourstudio.stockcarstory",
+  "appName": "Stock Car Story",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#1b2a6b"
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#1b2a6b",
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 900,
+      "backgroundColor": "#1b2a6b",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP",
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#1b2a6b",
+      "overlaysWebView": false
+    }
+  }
+}
