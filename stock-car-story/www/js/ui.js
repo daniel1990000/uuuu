@@ -507,11 +507,11 @@ function scrResearch() {
     const nx = GARAGES[G.garage + 1];
     if (!nx) h += "<h4>Fully upgraded</h4><div class='small g'>Nothing left to build.</div>";
     else {
-      const locked = nx.req && !G.seriesWon[nx.req];
+      const locked = !garageUnlocked(nx);
       h += "<h4>Next</h4><div class='row'><div class='f1'><b class='b'>" + nx.n + "</b>" +
         "<div class='small dim'>" + nx.crew + " crew · " + nx.cars + " machines · " + nx.teams + " teams</div>" +
         "<div class='small'>Cost " + fmtK(nx.cost) + "</div></div>" +
-        (locked ? "<span class='chip'>Win " + byId(SERIES, nx.req).n + "</span>"
+        (locked ? "<div class='small r' style='max-width:44%'>\uD83D\uDD12 " + garageReqText(nx) + "</div>"
           : "<button class='pill" + (G.money < nx.cost ? " off" : "") + "' onclick='upgradeGarage();updateChrome();closeAllDlg();scrResearch()'>Buy</button>") +
         "</div>";
     }
@@ -719,13 +719,22 @@ function scrStrategy(tr, season, fee) {
         Math.round((AURAS[STRAT.aura].boost - 1) * 100) + "% for " + AURAS[STRAT.aura].dur + " seconds."
       : "Save your auras for training, builds and upgrades.") + "</div>";
   }
+  h += "<h4>What it costs to run</h4><div class='row'><div class='f1'>" +
+    "<div class='small'>Entry fee <b>" + fmtK(fee) + "</b></div>" +
+    "<div class='small'>Crew and driver wages <b>" + fmtK(teamWages()) + "</b></div>" +
+    "<div class='small dim'>Wages are charged per race, not per month — sitting in the shop is free.</div>" +
+    "</div><span class='chip" + (G.money >= fee + teamWages() ? " gold" : " r") + "'>" +
+    fmtK(fee + teamWages()) + "</span></div>";
   h += "<div class='small' style='margin-top:10px'>You call your own stops with the <b class='b'>PIT</b> " +
     "button during the race — tyres, fuel or both. Stopping under caution costs about half the time.</div>";
 
   const go = () => {
     const a = (STRAT.aura && STRAT.aura !== "none" && G.auras[STRAT.aura] > 0) ? STRAT.aura : null;
     if (a) G.auras[a]--;
-    G.money -= fee; updateChrome(); closeAllDlg();
+    /* entry fee plus a race weekend's wages — the roster is paid for
+       turning up, not for the calendar turning over */
+    G.money -= fee + teamWages(); updateChrome(); closeAllDlg();
+    if (G.money < 0) checkBankrupt();
     enterRaceMode();
     startRace(tr, season, a);
   };
@@ -905,25 +914,93 @@ function refreshObjective() {
 }
 
 /* the shop screen groups the development tools in one place */
+/* ============================================================
+   WORKSHOP — one screen for everything you do to the machine.
+
+   This was a menu of four buttons that each opened another screen:
+   Research, Parts, Build, Training.  Four taps to change a tyre, and no
+   screen ever showed you the machine you were changing.  The work now
+   happens here, next to the car it applies to: what is fitted, what you
+   could fit, and what you could build instead.  Research keeps its own
+   screen because it is the one place you spend a different currency, and
+   Training moved out because it is about the driver, not the car.
+   ============================================================ */
 function scrDevelop() {
   closeAllDlg();
-  const car = G.cars[G.teams[G.curTeam].car];
-  let h = "<div class='small dim'>Research data: <b class='b'>" + Math.floor(G.rp) +
-    " RP</b> · Money: <b class='g'>" + fmtK(G.money) + "</b></div><div class='mg' style='margin-top:8px'>" +
-    "<button class='pill mi' onclick='scrResearch()'><span class='ico'>🔬</span>Research</button>" +
-    "<button class='pill mi' onclick='scrParts()'><span class='ico'>🔧</span>Parts</button>" +
-    "<button class='pill mi' onclick='scrBuild()'><span class='ico'>🛠</span>Build</button>" +
-    "<button class='pill mi' onclick='scrTrain()'><span class='ico'>🏋</span>Training</button>" +
-    "</div>";
+  const t = G.teams[G.curTeam];
+  const car = G.cars[t.car];
+  let h = "<div class='small dim'>Research data <b class='b'>" + Math.floor(G.rp) +
+    " RP</b> · Money <b class='g'>" + fmtK(G.money) + "</b> · Shop Tech <b>" +
+    Math.floor(shopTech()) + "</b></div>";
+
+  if (G.build) {
+    h += "<h4>In build</h4><div class='row'><div class='f1'><b class='b'>" +
+      esc(byId(CARS, G.build.carId).name) + "</b><div class='small dim'>" +
+      G.build.wks + " week(s) left</div></div></div>";
+  }
+
+  /* ---- the machine, and its slots ---- */
   if (car) {
-    const s = carStats(car);
+    const s2 = carStats(car);
     h += "<h4>Race machine</h4><div class='row'>" + carIcon(car) +
       "<div class='f1'><b class='b'>#" + car.num + " " + esc(car.name) + "</b> " + libTag("car", car.id) +
-      "<div class='small dim'>Sp" + Math.floor(s.spd) + " Ac" + Math.floor(s.acc) + " Hd" + Math.floor(s.hdl) +
-      " · parts " + car.parts.length + "/" + s.exp +
-      " · condition " + Math.round(100 * car.dur / s.maxdur) + "%</div>" +
-      bar(100 * car.dur / s.maxdur, car.dur < s.maxdur * 0.35 ? "d" : "") + "</div></div>";
+      "<div class='small dim'>Sp" + Math.floor(s2.spd) + " Ac" + Math.floor(s2.acc) +
+      " Hd" + Math.floor(s2.hdl) + " · condition " + Math.round(100 * car.dur / s2.maxdur) + "%</div>" +
+      bar(100 * car.dur / s2.maxdur, car.dur < s2.maxdur * 0.35 ? "d" : "") + "</div></div>";
+    if (car.dur < s2.maxdur * 0.9) {
+      h += "<div class='row'><div class='f1'><b>Repair the machine</b>" +
+        "<div class='small dim'>Back to full condition, " +
+        Math.max(1, Math.round(2 - shopTech() / 200)) + " week(s) in the shop</div></div>" +
+        "<button class='pill" + (G.money >= repairCost(car) && !G.repair ? "" : " off") +
+        "' onclick='startRepair(" + t.car + ");scrDevelop()'>" + fmtK(repairCost(car)) + "</button></div>";
+    }
+
+    /* fitted parts, removable in place */
+    h += "<h4>Parts fitted " + car.parts.length + "/" + s2.exp + "</h4>";
+    if (!car.parts.length) h += "<div class='small dim'>Nothing fitted yet.</div>";
+    car.parts.forEach((pp, i) => {
+      const pd = byId(PARTS, pp.id);
+      if (!pd) return;
+      h += "<div class='row'><span class='chip rank'>" + pd.rank + "</span><div class='f1'><b>" +
+        esc(pd.name) + "</b><div class='small'>" + fxText(pd.fx) + "</div>" +
+        "<div class='small dim'>install quality " + Math.round(pp.qual * 100) + "%</div></div>" +
+        "<button class='pill' onclick='removePart(G.cars[" + t.car + "]," + i + ");scrDevelop()'>Remove</button></div>";
+    });
+
+    /* everything you own that would go on it */
+    const spare = PARTS.filter(p => G.known.parts.includes(p.id) && !car.parts.some(x => x.id === p.id));
+    if (car.parts.length < s2.exp && spare.length) {
+      h += "<h4>Fit a part</h4>";
+      spare.forEach(p => {
+        const canPay = G.money >= partCostUI(p);
+        h += "<div class='row'><span class='chip rank'>" + p.rank + "</span><div class='f1'><b>" +
+          esc(p.name) + "</b> " + libTag("part", p.id) +
+          "<div class='small'>" + fxText(p.fx) + "</div>" +
+          "<div class='small dim'>" + fmtK(partCostUI(p)) + "</div></div>" +
+          "<button class='pill" + (canPay ? "" : " off") + "' onclick=\"pickInstall('" + p.id + "')\">Fit</button></div>";
+      });
+    } else if (car.parts.length >= s2.exp) {
+      h += "<div class='small dim' style='margin-top:6px'>Every slot on this machine is full. A better " +
+        "chassis carries more.</div>";
+    }
+  } else {
+    h += "<h4>No machine</h4><div class='small dim'>Build one below to go racing.</div>";
   }
-  h += "<div class='small dim' style='margin-top:8px'>Upgrades in Research are permanent — they raise every machine you build from that blueprint, and they carry into New Game+.</div>";
-  dlg("Develop", h, [["Close", closeDlg]]);
+
+  /* ---- build something better ---- */
+  const known = CARS.filter(c => G.known.cars.includes(c.id));
+  h += "<h4>Build a machine</h4>";
+  if (G.build) h += "<div class='small dim'>The crew is already building.</div>";
+  else known.forEach(c => {
+    h += "<div class='row'><div class='f1'><b class='b'>" + c.name + "</b> " + libTag("car", c.id) +
+      "<div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl + " Dur" + c.dur +
+      " · " + c.exp + " slots · " + fmtK(c.cost) + "</div></div>" +
+      "<button class='pill" + (G.money >= c.cost ? "" : " off") +
+      "' onclick=\"pickBuild('" + c.id + "')\">Build</button></div>";
+  });
+
+  h += "<div class='small dim' style='margin-top:10px'>Research turns race data into new blueprints and " +
+    "permanent upgrades — those raise every machine you build from then on, and carry into New Game+.</div>";
+  dlg("Workshop", h, [["\uD83D\uDD2C Research", () => { closeAllDlg(); scrResearch(); }],
+                      ["Close", () => closeAllDlg()]]);
 }

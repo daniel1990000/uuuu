@@ -246,11 +246,18 @@ function advanceWeek() {
 let autoN = 0;
 function autosave() { if (++autoN % 2 === 0) saveGame(); }
 
+/* What the roster costs to put a car on track once. */
+function teamWages() {
+  return Math.round(G.drivers.reduce((a, d) => a + d.sal, 0) +
+                    G.crew.reduce((a, c) => a + c.sal * (1 + (c.lv - 1) * 0.5), 0));
+}
 function onMonth() {
-  const sal = G.drivers.reduce((a, d) => a + d.sal, 0) +
-              G.crew.reduce((a, c) => a + c.sal * (1 + (c.lv - 1) * 0.5), 0);
-  G.money -= Math.round(sal);
-  /* sponsor contracts settle at M1 and M7 (GPS behaviour) */
+  /* Wages used to come out here, every month, whether or not you raced.
+     Sitting in the shop deciding what to build therefore cost money and
+     returned nothing, which reads as the game quietly fining you for
+     thinking.  They are charged per race entered instead: the same money
+     over a career, since a race is about a month apart, but now it is
+     attached to the thing that earns it and idle weeks are free. */
   if (G.month === 1 || G.month === 7) settleSponsors();
   if (G.money < 0) checkBankrupt();
 }
@@ -443,10 +450,34 @@ function startRepair(slot) {
   G.repair = { slot, wks: Math.max(1, Math.round(2 - shopTech() / 200)) };
   toast("Repairing — " + G.repair.wks + " week(s), " + fmtK(cost));
 }
+/* Is the next garage unlocked yet?
+
+   It used to be the championship or nothing, and that is a trap: the
+   garage caps how much crew you can carry, crew drive shop tech, shop tech
+   drives build quality, and build quality is what wins a championship.  A
+   team that cannot win the title cannot get the garage that would let it
+   win the title, and the whole game is locked behind one race weekend.
+
+   Winning the series is still the real route and still the fast one.  Piling
+   up race wins is the slow one, so a run of bad luck in one championship
+   costs you time rather than the rest of the game. */
+const GARAGE_WIN_ROUTE = { rookie: 12, national: 30, cup: 55 };
+function garageUnlocked(nx) {
+  if (!nx || !nx.req) return true;
+  if (G.seriesWon[nx.req]) return true;
+  const need = GARAGE_WIN_ROUTE[nx.req];
+  return need != null && G.stats.wins >= need;
+}
+function garageReqText(nx) {
+  if (!nx || !nx.req) return "";
+  const need = GARAGE_WIN_ROUTE[nx.req];
+  return "Win the " + byId(SERIES, nx.req).n +
+    (need != null ? ", or take " + need + " race wins (you have " + G.stats.wins + ")" : "");
+}
 function upgradeGarage() {
   const nx = GARAGES[G.garage + 1];
   if (!nx) return toast("Fully upgraded.");
-  if (nx.req && !G.seriesWon[nx.req]) return toast("Win the " + byId(SERIES, nx.req).n + " first.");
+  if (!garageUnlocked(nx)) return toast(garageReqText(nx) + ".");
   if (G.money < nx.cost) return toast("Not enough money.");
   G.money -= nx.cost; G.garage++;
   G.clearPts += 25;

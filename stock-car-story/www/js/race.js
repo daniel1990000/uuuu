@@ -245,6 +245,21 @@ function raceLanes(surf) {
   if (surf === "street") return { lo: 0.26, hi: 0.74, line: 0.44, swing: 1.00 };
   return { lo: 0.20, hi: 0.80, line: 0.32, swing: 1.00 };           // short track, two wide
 }
+/* Physical separation along the road, ignoring how many laps each car has
+   completed.  gapTo answers "who is winning", which counts laps; this
+   answers "are these two in the same piece of road", which must not.
+
+   Getting that wrong is what let a leader drive through a backmarker: two
+   cars exactly a lap apart came out 1194 units apart on a 1194-unit
+   circuit, so the separation pass treated them as nowhere near each other
+   while they were drawn in the same spot. */
+function physGap(a, b, tk) {
+  let g = (b.s - a.s) % tk.len;
+  if (g > tk.len / 2) g -= tk.len;
+  if (g < -tk.len / 2) g += tk.len;
+  return g;
+}
+
 /* signed gap to another car along the lap, in world units */
 function gapTo(a, b, tk) {
   let g = (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s);
@@ -463,7 +478,14 @@ function raceTick(dt) {
            more on the rough stuff, so it lasts about five events */
         const wearMul = { short: 1.35, ss: 1.1, mid: 1.0, road: 1.15, street: 1.45 }[track.surf];
         c.dur = Math.max(0, c.dur - (c.maxdur * 0.20 / track.laps) * wearMul * rnd(0.7, 1.4));
-        R.rp += 1 + (c.anl || 10) / 26;
+        /* Research income.  At the old rate a full fourteen-year career
+           finished having unlocked four of fifteen machines and eleven of
+           eighteen parts — most of the game never seen, with research data
+           sitting around thirty all the way through.  Races are also 40%
+           shorter than they were, and this is charged per lap, so the old
+           figure was paying out less than it looks.  Analysis is still the
+           lever: a crew built for it roughly doubles this. */
+        R.rp += 2.2 + (c.anl || 10) / 16;
         R.ad += (c.adRate || 10) / 14;
         if (c.dur <= 0 && !c.dnf) { c.dnf = true; banner("ENGINE LET GO — DNF", 3); sfx("bad"); }
       } else if (Math.random() < 0.0012 && c.lap > 3) {
@@ -580,12 +602,40 @@ function wreck(lead, tk, curv, heavy) {
    the same piece of road.  This runs after everyone has moved and makes
    the road solid — a car cannot be driven into the back of the one in
    front, and two side by side push each other apart rather than merge. */
-/* Sized off what is actually drawn.  CAR_WORLD is 5.6 units long and the
-   sprite is blitted at 1.15 of that, so a car covers about 6.4 units of
-   road; the body is roughly 46% as wide as it is long.  These are those
-   numbers with a little air, not guesses. */
-const CAR_LEN = 7.2;                 // world units, nose to tail plus a gap
-const CAR_WIDE = 0.19;               // lane units, door to door
+/* Sized off what the renderer actually draws, not guessed.
+
+   This was wrong and it is why cars still visibly overlapped even though
+   the separation reported no clashes: the checks were in lane units, and
+   a lane unit is not a world unit.  laneOffset spreads lane 0..1 across
+   only 74% of the track width, so a lateral threshold of 0.19 lanes came
+   out at about 4.2 world units — while drawCarSprite blits a body roughly
+   5.4 world units across.  Two cars exactly at the threshold still drew on
+   top of each other, by up to 96% of a car in a tight pack.
+
+   So the lateral figure is derived at runtime from the same numbers the
+   renderer uses, rather than being a constant that has to be kept in sync
+   with them by hand. */
+const CAR_LEN = 7.6;                 // world units, nose to tail plus a gap
+/* How much road the lane range covers, in world units.
+
+   The renderer spreads lane 0..1 across 74% of the track width, and that
+   works out at a constant because the zoom and the half-width both scale
+   with the screen.  It is stated here rather than read off the camera
+   because the simulation must not depend on a camera: raceTick runs
+   before the first drawRace, so reaching for VIEW.HALF from here threw
+   "Cannot read properties of null" on the opening tick of every race. */
+const LANE_SPAN = 22.0;
+const laneWorld = (lane) => (0.5 - lane) * LANE_SPAN;
+
+function carLaneWidth() {
+  /* CAR_WORLD * 1.15 is the sprite size; drawCarSprite divides by 0.72 to
+     get the blit box, and the painted body fills about 60% of it.  Read
+     lazily because render.js defines CAR_WORLD and loads after this file. */
+  /* 0.60 of the blit box is the painted body; the 1.22 is daylight, so two
+     cars side by side read as two cars rather than as one wide one. */
+  const bodyW = (typeof CAR_WORLD === "number" ? CAR_WORLD : 5.6) * 1.15 / 0.72 * 0.60 * 1.22;
+  return clamp(bodyW / LANE_SPAN, 0.08, 0.45);
+}
 
 function resolveContact(dt) {
   const tk = R.tk;
@@ -594,27 +644,53 @@ function resolveContact(dt) {
      is the overlap that was still visible. */
   const live = R.field.filter(c => !c.done && !c.dnf && c.pit <= 0);
   if (live.length < 2) return;
+  const CW_LANE = carLaneWidth();
+
+  /* How much centreline gap a car actually needs where it is sitting.
+
+     Separation is measured along the centreline, but cars do not drive the
+     centreline.  Through a tight corner the inside line is a shorter arc,
+     so two cars a fixed centreline distance apart are physically closer
+     than that — on a hairpin of radius 16 with a car 11 units to the
+     inside, seven and a half units of centreline is barely two and a half
+     units of daylight.  That is why the tight street circuit still drew
+     cars on top of each other when the wide ovals had stopped.
+
+     Correcting by the radius ratio makes the requirement mean the same
+     thing everywhere. */
+  const needGap = (c) => {
+    const p = sampleTrack(tk, c.s);
+    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
+    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
+    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
+    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+  };
 
   /* Two passes: separating one pair can push a car into another, and a
      sixteen-car pack is exactly where that chains. */
-  for (let pass = 0; pass < 2; pass++) {
-    live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
+  for (let pass = 0; pass < 3; pass++) {
+    /* ordered by where they are on the road, not by who is winning */
+    live.sort((a, b) => b.s - a.s);
 
     /* nose to tail */
     for (let i = 1; i < live.length; i++) {
       const c = live[i];
       /* Look at every car close enough to matter, not a fixed handful.
          Capping it at the four ahead missed cars in a tight pack. */
-      for (let j = i - 1; j >= 0; j--) {
-        const ah = live[j];
-        const gap = gapTo(c, ah, tk);
-        if (gap > CAR_LEN * 2.2) break;          // sorted, so everything further is too
-        if (gap <= 0) continue;
-        if (Math.abs(ah.lane - c.lane) > CAR_WIDE) continue;
-        if (gap >= CAR_LEN) continue;
+      /* every car, wrapping round the start line, since the two closest
+         cars on track can sit either side of it */
+      for (let k = 1; k < live.length; k++) {
+        const ah = live[(i - k + live.length) % live.length];
+        if (ah === c) continue;
+        const gap = physGap(c, ah, tk);
+        if (gap <= 0 || gap > CAR_LEN * 3.2) continue;
+        if (Math.abs(ah.lane - c.lane) > CW_LANE) continue;
+        const need = needGap(c);
+        if (gap >= need) continue;
         const closing = c.v - ah.v;
-        c.s -= (CAR_LEN - gap);
+        c.s -= (need - gap);
         if (c.s < 0) { c.s += tk.len; c.lap--; }
+        if (c.s >= tk.len) { c.s -= tk.len; c.lap++; }
         c.v = Math.min(c.v, ah.v * 0.985);
         if (pass === 0 && closing > 9 && c.spin <= 0 && ah.spin <= 0) {
           const hard = closing > 17;
@@ -637,11 +713,13 @@ function resolveContact(dt) {
     for (let i = 0; i < live.length; i++) {
       for (let j = i + 1; j < live.length; j++) {
         const a = live[i], b = live[j];
-        if (Math.abs(gapTo(a, b, tk)) >= CAR_LEN) continue;
+        if (Math.abs(physGap(a, b, tk)) >= Math.max(needGap(a), needGap(b))) continue;
         const dl = b.lane - a.lane;
-        const need = CAR_WIDE * 1.05;
+        const need = CW_LANE * 1.05;
         if (Math.abs(dl) >= need) continue;
-        const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.5;
+        /* resolve the whole overlap, not half of it: at half, a pair being
+           pushed together by the pack every tick never quite separates */
+        const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.85;
         a.lane = clamp(a.lane - shove, 0.03, 0.97);
         b.lane = clamp(b.lane + shove, 0.03, 0.97);
         if (pass === 0) {
@@ -689,6 +767,27 @@ function bunchField() {
   const tk = R.tk;
   const live = R.field.filter(c => !c.done && !c.dnf && c.pit <= 0);
   if (live.length < 2) return;
+  const CW_LANE = carLaneWidth();
+
+  /* How much centreline gap a car actually needs where it is sitting.
+
+     Separation is measured along the centreline, but cars do not drive the
+     centreline.  Through a tight corner the inside line is a shorter arc,
+     so two cars a fixed centreline distance apart are physically closer
+     than that — on a hairpin of radius 16 with a car 11 units to the
+     inside, seven and a half units of centreline is barely two and a half
+     units of daylight.  That is why the tight street circuit still drew
+     cars on top of each other when the wide ovals had stopped.
+
+     Correcting by the radius ratio makes the requirement mean the same
+     thing everywhere. */
+  const needGap = (c) => {
+    const p = sampleTrack(tk, c.s);
+    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
+    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
+    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
+    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+  };
   live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
   const leader = live[0];
   const leadLap = leader.lap;
@@ -846,7 +945,16 @@ function showResults() {
 
   if (seasonRef) {
     applySeasonPoints(seasonRef);
-    dlg(track.n, body, [["Standings", () => { closeDlg(); afterSeasonRace(seasonRef); }]]);
+    /* The round used to advance inside the Standings button's handler, so
+       dismissing the results with the corner cross skipped it and the
+       championship stalled on that round forever — you could race it again
+       and again and never reach the end of the season, which is what gates
+       the garage and everything behind it.  Settling the round is part of
+       finishing the race now; the button only chooses whether you look at
+       the table. */
+    advanceSeasonRound(seasonRef);
+    const over = seasonRef.round >= seasonRef.def.tracks.length;
+    dlg(track.n, body, [["Standings", () => { closeDlg(); showStandings(seasonRef, over); }]]);
   } else {
     dlg(track.n, body, [["OK", closeDlg]]);
   }
@@ -897,7 +1005,10 @@ function applySeasonPoints(season) {
   }
   season.lastFinish = null;
 }
-function afterSeasonRace(season) {
+/* Move the championship on by one round, including the playoff reset.
+   Kept separate from showing the table so that settling a round never
+   depends on the player choosing to look at it. */
+function advanceSeasonRound(season) {
   season.round++;
   const done = season.round >= season.def.tracks.length;
   /* playoff reset before the finale */
@@ -910,8 +1021,38 @@ function afterSeasonRace(season) {
     season.rivals.forEach(r => { r.pts = cut.includes(r.name) ? 5000 : Math.min(r.pts, 1); });
     toast("<span class='b'>PLAYOFF!</span> The top 4 are level going into the finale.");
   }
-  showStandings(season, done);
+  if (done) settleSeason(season);
+  return done;
 }
+
+/* Pay out the championship, award the title, and close the season.
+
+   This used to live inside the final standings screen, which meant the
+   title only existed if you chose to look at the table: dismissing that
+   dialog with the corner cross finished the season without ever recording
+   that you had won it — and the garage, the next series and everything
+   behind them are gated on exactly that record. */
+function settleSeason(season) {
+  if (season.settled) return;
+  season.settled = true;
+  const arr = standingsArray(season);
+  const myRank = arr.findIndex(e => e.isP) + 1;
+  const payout = season.def.purse[Math.min(myRank, 6) - 1] || 0;
+  G.money += payout; G.stats.earned += payout;
+  season.finalRank = myRank; season.payout = payout;
+  if (myRank === 1 && !G.seriesWon[season.def.id]) {
+    G.seriesWon[season.def.id] = true; G.stats.titles++; G.clearPts += 50;
+    G.fans += season.def.fans;
+    const drv = G.drivers[G.teams[G.curTeam].driver];
+    if (drv) grantAura(auraTierFor(drv), "championship!");
+    sfx("win");
+  }
+  G.seriesDone[season.def.id] = true;
+  SEASON = null;
+  refreshUnlocks();
+}
+/* kept for any caller that wants both in one go */
+function afterSeasonRace(season) { showStandings(season, advanceSeasonRound(season)); }
 function standingsArray(season) {
   const arr = [{ name: season.meName, team: "YOUR TEAM", pts: season.mePts, isP: true }]
     .concat(season.rivals.map(r => ({ name: r.name, team: r.team, pts: r.pts })));
@@ -931,30 +1072,20 @@ function showStandings(season, done) {
       [["Next: " + nx.n, () => { closeDlg(); nextSeasonRace(); }], ["Back to shop", () => { closeDlg(); }]]);
     return;
   }
-  /* season over */
-  const myRank = arr.findIndex(e => e.isP) + 1;
-  const payout = season.def.purse[Math.min(myRank, 6) - 1] || 0;
-  G.money += payout; G.stats.earned += payout;
+  /* season over — already settled, so this only reports it */
+  const myRank = season.finalRank || (arr.findIndex(e => e.isP) + 1);
+  const payout = season.payout || 0;
   let msg;
   if (myRank === 1) {
-    msg = "<div class='bigwin'>🏆 SERIES CHAMPION 🏆</div>" + table +
-      "<div class='small'>Champion's purse <span class='g'>+" + fmtK(payout) + "</span></div>";
-    if (!G.seriesWon[season.def.id]) {
-      G.seriesWon[season.def.id] = true; G.stats.titles++; G.clearPts += 50;
-      G.fans += season.def.fans;
-      const drv = G.drivers[G.teams[G.curTeam].driver];
-      grantAura(auraTierFor(drv), "championship!");
-      msg += "<div class='b small'>+" + season.def.fans + " fans · championship aura earned</div>";
-      const nx = GARAGES[G.garage + 1];
-      if (nx && nx.req === season.def.id) msg += "<div class='g small'>A bigger garage is now available in Research.</div>";
-    }
-    sfx("win");
+    msg = "<div class='bigwin'>\uD83C\uDFC6 SERIES CHAMPION \uD83C\uDFC6</div>" + table +
+      "<div class='small'>Champion's purse <span class='g'>+" + fmtK(payout) + "</span></div>" +
+      "<div class='b small'>+" + season.def.fans + " fans \u00b7 championship aura earned</div>";
+    const nx = GARAGES[G.garage + 1];
+    if (nx && nx.req === season.def.id)
+      msg += "<div class='g small'>A bigger garage is now available \u2014 More \u2192 Records, or the Workshop.</div>";
   } else {
     msg = "<div class='bigpos'>Season finished " + ord(myRank) + "</div>" + table +
       (payout ? "<div class='small'>Season payout <span class='g'>+" + fmtK(payout) + "</span></div>" : "");
   }
-  G.seriesDone[season.def.id] = true;
-  SEASON = null;
-  refreshUnlocks();
   dlg("Final Standings", msg, [["Done", closeDlg]]);
 }
