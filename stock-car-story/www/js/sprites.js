@@ -476,8 +476,8 @@ const CHASSIS_MODEL = {
 const CAR_FRAMES = 64;
 const VOX_SQ = 0.56;              // matches the ground-plane squash
 let CAR_CELL = 1.7;               // screen px per model cell (scales with PX)
-let CAR_ATLAS = null;             // [colourIndex][frame] -> canvas
-let CAR_ATLAS_KEYS = null;
+let CAR_ATLAS = null;             // Map "model|colour" -> [frame] canvas
+let CAR_ATLAS_PX = 0;             // the PX the cached frames were baked at
 
 function bakeCarFrame(model, colour, ang) {
   const rows = model.length, cols = Math.max(...model.map(r => r.length));
@@ -554,27 +554,45 @@ function outlinePass(canvas, colour) {
   g.putImageData(out, 0, 0);
 }
 
-function buildCarAtlas() {
-  CAR_CELL = 1.7 * (PX / 2) * 1.25;      // more cells of detail at high dpi
-  CAR_ATLAS = {};
-  CAR_ATLAS_KEYS = Object.keys(CAR_MODELS);
-  for (const key of CAR_ATLAS_KEYS) {
-    CAR_ATLAS[key] = TEAMC.map(col => {
-      const frames = [];
-      for (let f = 0; f < CAR_FRAMES; f++)
-        frames.push(bakeCarFrame(CAR_MODELS[key], col, (f / CAR_FRAMES) * Math.PI * 2));
-      return frames;
-    });
+/* Bake one model in one colour, on demand.
+
+   This used to bake every combination up front: four models times eight
+   liveries times sixty-four frames is 2,048 canvases, built synchronously
+   the first time anything drew a car — which is the title screen.  A
+   desktop shrugs that off.  A phone browser does not: it blocks the main
+   thread for seconds and can run out of canvas memory partway through,
+   and because the atlas object was assigned before the loop filled it, a
+   failure left it present but empty and every later frame threw.  That is
+   a permanent black screen from one slow bake.
+
+   A race needs at most a handful of liveries and one or two models, so
+   baking per variant does a fraction of the work and never does any of it
+   for a car that is not on track. */
+function atlasFor(modelKey, colourIdx) {
+  const stamp = PX;
+  if (!CAR_ATLAS || CAR_ATLAS_PX !== stamp) {
+    CAR_ATLAS = new Map();
+    CAR_ATLAS_PX = stamp;
+    CAR_CELL = 1.7 * (PX / 2) * 1.25;    // more cells of detail at high dpi
   }
+  const model = CAR_MODELS[modelKey] ? modelKey : "stock";
+  const ci = ((colourIdx % TEAMC.length) + TEAMC.length) % TEAMC.length;
+  const id = model + "|" + ci;
+  let frames = CAR_ATLAS.get(id);
+  if (!frames) {
+    frames = [];
+    for (let f = 0; f < CAR_FRAMES; f++)
+      frames.push(bakeCarFrame(CAR_MODELS[model], TEAMC[ci], (f / CAR_FRAMES) * Math.PI * 2));
+    CAR_ATLAS.set(id, frames);
+  }
+  return frames;
 }
 /* Blit a baked car.  `ang` is the car's heading in VIEW space (world
    heading + camera rotation) — NOT the squashed screen angle.  The bake
    applies the squash itself, so feeding it a screen angle made every car
    point slightly wrong: that is what looked wonky on the straights. */
 function drawCarSprite(x, y, ang, colourIdx, modelKey, size) {
-  if (!CAR_ATLAS) buildCarAtlas();
-  const set = CAR_ATLAS[modelKey] || CAR_ATLAS.stock;
-  const frames = set[((colourIdx % TEAMC.length) + TEAMC.length) % TEAMC.length];
+  const frames = atlasFor(modelKey, colourIdx);
   let a = ang % (Math.PI * 2); if (a < 0) a += Math.PI * 2;
   const f = Math.round((a / (Math.PI * 2)) * CAR_FRAMES) % CAR_FRAMES;
   const img = frames[f];

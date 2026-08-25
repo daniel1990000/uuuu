@@ -113,6 +113,13 @@ function startRace(track, season, auraTier) {
     rp: 0, ad: 0, lapCount: 0, msg: "", msgT: 0, pQual,
     leader: grid[0], camS: grid[0].s, finish: [], winT: 0,
   };
+  /* Bake the liveries this race actually needs, now, while the grid
+     countdown is on screen.  Baking on demand keeps boot cheap, but left
+     alone it means a stutter the first time each new car comes into view;
+     doing it here pays that cost once, where there is nothing to stutter. */
+  if (typeof atlasFor === "function") {
+    for (const c of field) { try { atlasFor(c.model, c.paintIdx); } catch (e) { break; } }
+  }
   banner("QUALIFIED " + ord(pQual), 2.2);
   sfx("ok");
   return R;

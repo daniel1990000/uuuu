@@ -23,21 +23,44 @@ function exitRaceMode() {
   $("raceHud").style.display = "none";
 }
 
+/* One draw failure used to mean a black screen forever: the frame threw,
+   nothing was painted, and the next frame threw in the same place.  Now
+   the first failure is reported on screen with its message, so a phone
+   that cannot run something says so instead of going dark. */
+let LOOP_ERR = 0;
+function fatal(where, e) {
+  if (LOOP_ERR++) return;
+  const msg = (e && (e.message || e)) + "";
+  const d = document.createElement("div");
+  d.style.cssText = "position:fixed;inset:0;z-index:99;background:#0d1638;color:#fff;" +
+    "font:12px/1.7 monospace;padding:18px;overflow:auto;-webkit-user-select:text;user-select:text";
+  d.innerHTML = "<b style='color:#ffd23f'>Stock Car Story hit a problem</b><br><br>" +
+    "<b>where:</b> " + where + "<br><b>error:</b> " + msg.replace(/</g, "&lt;") +
+    "<br><br><span style='color:#9aa4bd'>Screenshot this and send it over — it says exactly " +
+    "what your browser could not do.</span>";
+  document.body.appendChild(d);
+}
+window.addEventListener("error", e => fatal("script", e.error || e.message));
+
 function loop(ts) {
   requestAnimationFrame(loop);
+  if (LOOP_ERR) return;
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016);
   lastT = ts; frame++;
 
   if (MODE === "title") {
     $("tabbar").style.display = "none"; $("speedBtn").classList.remove("on");
-    drawTitle(); return;
+    try { drawTitle(); } catch (e) { fatal("title screen", e); }
+    return;
   }
   if (!G) return;
 
   if (MODE === "race") {
-    if (R && !dlgStack.length) raceTick(dt);
-    if (R) { drawRace(); updateRaceHud(); }
-    else drawGarage();
+    try {
+      if (R && !dlgStack.length) raceTick(dt);
+      if (R) { drawRace(); updateRaceHud(); }
+      else drawGarage();
+    } catch (e) { fatal("race", e); }
     return;
   }
   /* shop: time flows unless a dialog is open or the player paused */
@@ -102,7 +125,7 @@ function titleScreen() {
   const libN = Object.keys(lib.cars || {}).length + Object.keys(lib.parts || {}).length;
   dlg("STOCK CAR STORY",
     "<div style='text-align:center;line-height:1.9'>🏁<br>Hire drivers. Build machines.<br>Chase the championship.<br>" +
-    "<span class='small dim'>Ovals, dirt, superspeedways and road courses.</span>" +
+    "<span class='small dim'>Short tracks, superspeedways, road courses and street circuits.</span>" +
     (libN > 1 ? "<br><span class='small g'>Library: " + libN + " developed designs carry over</span>" : "") + "</div>",
     btns);
 }
@@ -128,8 +151,11 @@ function startShop() {
 
 function boot() {
   initRender();
-  buildTextures();
-  buildUIChrome();
+  /* Textures and the pixel-art button frames are both cosmetic.  If a
+     browser cannot bake them the game should still be playable, so
+     neither is allowed to stop boot. */
+  try { buildTextures(); } catch (e) { console.warn("textures unavailable", e); }
+  try { buildUIChrome(); } catch (e) { console.warn("ui chrome unavailable", e); }
 
   const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
   tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
