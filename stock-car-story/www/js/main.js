@@ -67,7 +67,7 @@ function loop(ts) {
         const steps = clamp(G.set.speed | 0, 1, 3);
         for (let i = 0; i < steps && R; i++) raceTick(dt);
       }
-      if (R) { drawRace(); updateRaceHud(); }
+      if (R) { updateFX(dt); drawRace(); updateRaceHud(); }
       else drawGarage();
     } catch (e) { fatal("race", e); }
     return;

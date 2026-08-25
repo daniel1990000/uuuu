@@ -1614,7 +1614,7 @@ function makeEntry(name, team, perf, col, num, opts) {
     tyre: "medium", mode: "normal", pitArmed: 0, pitKind: "both",
     /* crash state: heat is how close this car is to a mistake, spin is the
        seconds it spends gathering one up, damage slows it for good */
-    heat: 0, spin: 0, damage: 0, wrecked: 0, nudge: 0,
+    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0,
   }, opts || {});
 }
 
@@ -1726,6 +1726,7 @@ function startRace(track, season, auraTier) {
     c.lap = 0;
   });
   if (typeof resetRaceView === "function") resetRaceView();
+  if (typeof resetFX === "function") resetFX();
   const pQual = grid.findIndex(c => c.isP) + 1;
 
   R = {
@@ -1905,8 +1906,22 @@ function raceTick(dt) {
       c.v = Math.max(0, c.v - 26 * dt);
       c.s += c.v * dt;
       c.lane = clamp(c.lane + c.nudge * dt, 0.04, 0.96);
-      if (c.spin <= 0) c.nudge = 0;
+      /* the car swaps ends: spinRate is set when it lets go, and the
+         renderer adds spinAng to the heading, so you watch it happen */
+      c.spinAng = (c.spinAng || 0) + (c.spinRate || 6) * dt;
+      if (typeof fxTrail === "function" && c.v > 4) {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);               // tyre smoke off locked wheels
+      }
+      if (c.spin <= 0) { c.nudge = 0; c.spinRate = 0; c.spinAng = 0; }
       continue;
+    }
+    /* a hurt car trails smoke for the rest of the day */
+    if (c.damage > 24 && Math.random() < c.damage / 900) {
+      if (typeof fxTrail === "function") {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);
+      }
     }
 
     const sample = sampleTrack(tk, c.s);
@@ -2039,7 +2054,12 @@ function raceTick(dt) {
       c.s -= tk.len; c.lap++;
       if (c === R.leader) onLeaderLap();
       const md = MODES[c.mode] || MODES.normal;
-      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2) *
+      /* How twisty the lap is does not change during a race, so measure it
+         once.  It was being recomputed on every lap crossing by every car,
+         and that scan walks the entire lap — sixteen cars round a short
+         circuit made it one of the most-run pieces of code in the game. */
+      if (tk.avgCurv == null) tk.avgCurv = curvatureAhead(tk, 0, tk.len);
+      const wearT = (100 / (track.laps * 0.55)) * (1 + tk.avgCurv * 1.2) *
         tset.wear * md.wear;
       const wearF = (100 / (track.laps * 0.80 * c.fuelMul)) * md.fuel;
       c.tyreLife = Math.max(0, c.tyreLife - wearT * rnd(0.85, 1.15) * 0.55);
@@ -2126,9 +2146,14 @@ function carMistake(c, tk, curv) {
   }
   if (r < slide) {                         // a slide, a couple of seconds
     c.spin = rnd(0.5, 1.1);
+    c.spinRate = (Math.random() < 0.5 ? -1 : 1) * rnd(4, 8);
     c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.15, 0.4);
     c.v *= 0.62;
-    if (c.isP) { banner("LOOSE! YOU LOSE GROUND", 1.6); sfx("bad"); }
+    const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+    if (typeof fxBurst === "function") fxBurst("smoke", wp.x, wp.y, 12);
+    if (typeof fxShake === "function" && c.isP) fxShake(3);
+    sfx("squeal");
+    if (c.isP) banner("LOOSE! YOU LOSE GROUND", 1.6);
     return;
   }
   wreck(c, tk, curv, Math.random() < 0.28);
@@ -2150,8 +2175,20 @@ function wreck(lead, tk, curv, heavy) {
   }
   for (const c of collected) {
     c.spin = rnd(1.1, 2.2);
+    c.spinRate = (Math.random() < 0.5 ? -1 : 1) * rnd(7, 14);
     c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.3, 0.7);
     c.v *= 0.25;
+    /* the impact itself: dust off the surface, panels leaving the car,
+       and sparks where it is grinding along the wall */
+    const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+    if (typeof fxBurst === "function") {
+      fxBurst("dust",   wp.x, wp.y, heavy ? 22 : 13);
+      fxBurst("debris", wp.x, wp.y, heavy ? 20 : 11, c.col);
+      fxBurst("spark",  wp.x, wp.y, heavy ? 22 : 13);
+      fxBurst("smoke",  wp.x, wp.y, heavy ? 18 : 11);
+    }
+    if (typeof fxShake === "function" && (c.isP || collected.length > 1))
+      fxShake(heavy ? 8 : 5);
     const hit = ri(heavy ? 18 : 8, heavy ? 46 : 24);
     c.damage = Math.min(100, c.damage + hit);
     c.wrecked = 1;
@@ -2162,8 +2199,9 @@ function wreck(lead, tk, curv, heavy) {
       if (c.isP) { banner("YOU'RE OUT — TOO MUCH DAMAGE", 3); sfx("bad"); }
     }
   }
+  sfx(heavy ? "bigcrash" : "crash");
   const me = collected.find(c => c.isP);
-  if (me) { if (!me.dnf) sfx("bad"); banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4); }
+  if (me) banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4);
   else banner(collected.length > 2 ? "BIG WRECK — " + collected.length + " CARS"
                                    : "CAUTION — CAR IN THE FENCE", 2.4);
   if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(6, 10); R.cautions++; bunchField(); sfx("yellow"); }
@@ -2231,12 +2269,24 @@ function resolveContact(dt) {
 
      Correcting by the radius ratio makes the requirement mean the same
      thing everywhere. */
+  /* Computed once per car per tick and cached on the car.
+
+     This used to be a function called inside the pair loops, and it samples
+     the track — so a sixteen-car field ran well over a thousand track
+     samples per tick, three passes a frame.  That, not the drawing, is what
+     put the tight street circuit near thirteen milliseconds a frame. */
   const needGap = (c) => {
+    if (c._ngT === R.t) return c._ng;
     const p = sampleTrack(tk, c.s);
-    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
-    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
-    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
-    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    let v;
+    if (Math.abs(p.cs) < 0.02) v = CAR_LEN;
+    else {
+      const r = 100 / Math.max(0.05, Math.abs(p.cs));    // curv = min(1, 100/r)
+      const o = laneWorld(c.lane) * Math.sign(p.cs);     // toward the inside
+      v = CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    }
+    c._ngT = R.t; c._ng = v;
+    return v;
   };
 
   /* Two passes: separating one pair can push a car into another, and a
@@ -2271,7 +2321,10 @@ function resolveContact(dt) {
           ah.heat += hard ? 0.12 : 0.035;
           if (hard) {
             ah.v *= 0.93;
-            if (ah.isP || c.isP) { banner("CONTACT!", 1.2); sfx("bad"); }
+            const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+            if (typeof fxBurst === "function") fxBurst("spark", wp.x, wp.y, 4);
+            sfx("scrape");
+            if (ah.isP || c.isP) banner("CONTACT!", 1.2);
           }
         }
         const push = (c.lane <= ah.lane ? -1 : 1) * 0.55 * dt;
@@ -2354,12 +2407,24 @@ function bunchField() {
 
      Correcting by the radius ratio makes the requirement mean the same
      thing everywhere. */
+  /* Computed once per car per tick and cached on the car.
+
+     This used to be a function called inside the pair loops, and it samples
+     the track — so a sixteen-car field ran well over a thousand track
+     samples per tick, three passes a frame.  That, not the drawing, is what
+     put the tight street circuit near thirteen milliseconds a frame. */
   const needGap = (c) => {
+    if (c._ngT === R.t) return c._ng;
     const p = sampleTrack(tk, c.s);
-    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
-    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
-    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
-    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    let v;
+    if (Math.abs(p.cs) < 0.02) v = CAR_LEN;
+    else {
+      const r = 100 / Math.max(0.05, Math.abs(p.cs));    // curv = min(1, 100/r)
+      const o = laneWorld(c.lane) * Math.sign(p.cs);     // toward the inside
+      v = CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    }
+    c._ngT = R.t; c._ng = v;
+    return v;
   };
   live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
   const leader = live[0];
@@ -4898,6 +4963,12 @@ function tree(x, y, s, kind) {
 
 function drawRace() {
   const tk = R.tk, track = R.track;
+  /* apply the shake to the whole scene, then take it off again at the end */
+  const shaking = SHAKE > 0.05;
+  if (shaking) {
+    cx.save();
+    cx.translate(Math.round(rnd(-SHAKE, SHAKE)), Math.round(rnd(-SHAKE, SHAKE)));
+  }
   if (!VIEW) setupView(tk);
   const me = R.field[0];
   camFollow(sampleTrack(tk, me.s + 16));
@@ -5025,7 +5096,9 @@ function drawRace() {
   const drawn = R.field.filter(c => !(c.dnf && c.done)).map(c => {
     const p = sampleTrack(tk, c.s);
     const w = W2S(offsetPoint(p, laneOffset(c.lane)));
-    return { c, w, ang: p.h + VIEW.rot };
+    /* spinAng is what makes a spin look like a spin rather than a car
+       sliding along still pointing forwards */
+    return { c, w, ang: p.h + VIEW.rot + (c.spinAng || 0) };
   }).filter(o => onScreen(o.w, 60));
   drawn.sort((a, b) => a.w.y - b.w.y);
   for (const o of drawn) {
@@ -5067,12 +5140,18 @@ function drawRace() {
     cx.globalAlpha = 1;
   }
 
+  /* smoke, dust, debris and sparks sit above the cars so a wreck reads
+     as happening on top of the track rather than under it */
+  drawFX();
+
   drawGantry(tk, HALF);
 
   if (R.yellow) {
     cx.fillStyle = "rgba(233,161,27,.15)"; cx.fillRect(0, 0, CW, CH);
     for (let i = 0; i < CW; i += 34) px(i, 0, 17, 4, "#e9a11b");
   }
+  if (shaking) cx.restore();          // HUD must not shake with the world
+
   drawMiniMap(tk);
   if (R.phase === "grid") {
     const n = Math.ceil(R.timer);
@@ -5111,9 +5190,19 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
 
   /* Grandstand: a raked deck with a front railing, aisles that split it
      into sections, entrance tunnels at the base and a roof on columns. */
+  /* A frame budget for the crowd.
+
+     Grandstands were the most expensive thing in the game by a distance:
+     6.7ms of a 9ms frame on the tight street circuit, where the camera can
+     see most of the lap at once and every visible section was drawn in
+     full with a crowd in it.  Sections are capped and the crowd has a
+     sprite budget; both spend themselves nearest-first, so what you lose
+     is people in the far corner of a stand you can barely see. */
+  let standBudget = 13, crowdBudget = 240;
   const standStep = Math.max(8, step * 3);
   for (let d = Math.floor(d0 / standStep) * standStep; d <= d1; d += standStep) {
     if (!onStraight(d)) continue;
+    if (standBudget-- <= 0) break;
     const p = sampleTrack(tk, d);
     const p2 = sampleTrack(tk, d + standStep * 1.02);
     const main = isMain(d);
@@ -5156,6 +5245,7 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
         const t2 = (k + 0.35) / n;
         const sd2 = seed + k * 13;
         if (sd2 % 12 === 0) continue;                        // an empty seat here and there
+        if (crowdBudget-- <= 0) continue;
         spectator(sA.x + (sB.x - sA.x) * t2 - 2 * PX,
                   sA.y + (sB.y - sA.y) * t2 - 11 * PX, sd2, ((frame >> 4) + sd2) % 4 === 0);
       }
@@ -5201,9 +5291,11 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   const segs = [];
   for (let d = d0; d <= d1; d += wStep) segs.push(W2S(offsetPoint(sampleTrack(tk, d), -HALF - 2.2)));
   cx.lineCap = "butt"; cx.lineJoin = "round";
+  let wallBudget = 34;
   for (let i = 0; i < segs.length - 1; i++) {
     const a = segs[i], b = segs[i + 1];
     if (!onScreen(a, 70) && !onScreen(b, 70)) continue;
+    if (wallBudget-- <= 0) break;
     const k = Math.abs(Math.floor((d0 + i * wStep) / 11));
     /* the authored panel face */
     stripTex([a, b], -wallH, street ? "concwall" : "safer", Math.max(1, wallH / 12), 0);
@@ -5223,12 +5315,18 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   }
   cx.stroke();
 
-  /* catch fence: authored mesh between real posts */
+  /* Catch fence: authored mesh between real posts.
+
+     Budgeted like the crowd.  Every visible wall segment used to get its
+     own textured strip, and on a circuit where the camera sees most of the
+     lap that is a lot of large fills for something you look through. */
   if (VIEW.sc > 1.8) {
     const fh = wallH * 2.6;
+    let fenceBudget = 26;
     for (let i = 0; i < segs.length - 1; i++) {
       const a = segs[i], b = segs[i + 1];
       if (!onScreen(a, 60) && !onScreen(b, 60)) continue;
+      if (fenceBudget-- <= 0) break;
       stripTex([a, b], -fh, "fence", Math.max(1, PX * 0.7), wallH);
     }
     for (let i = 0; i < segs.length - 1; i += 2) {
@@ -5412,6 +5510,116 @@ function straightRuns(tk) {
 }
 function resetRaceView() { VIEW = null; SCENE = null; }
 
+/* ============================================================
+   CRASH EFFECTS
+
+   A wreck used to be a number changing: the car slowed, a banner said
+   so, and nothing on screen looked like an accident.  These are the bits
+   that make it read as one — tyre smoke off a locked wheel, the dust and
+   debris of a hit, sparks off the wall, and a plume trailing a damaged
+   car for the rest of the race.
+
+   Particles live in world space so they stay where the accident happened
+   while the camera moves on, and carry a height so smoke rises off the
+   surface instead of sliding along it.
+   ============================================================ */
+let FX = [];
+const FX_MAX = 300;
+/* A hit you feel.  Two frames of camera displacement does more for the
+   weight of a crash than any amount of extra debris. */
+let SHAKE = 0;
+function fxShake(amount) { SHAKE = Math.min(9, SHAKE + amount); }
+
+/* kind: smoke | dust | debris | spark */
+function fxBurst(kind, wx, wy, power, tint) {
+  if (FX.length > FX_MAX) return;
+  const n = Math.round(clamp(power, 1, 26));
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = (kind === "debris" ? 26 : kind === "spark" ? 34 : 9) * rnd(0.35, 1.25);
+    FX.push({
+      k: kind, x: wx, y: wy, z: kind === "smoke" ? rnd(0, 2) : 0,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      vz: kind === "smoke" ? rnd(7, 15) : kind === "debris" ? rnd(9, 22) : rnd(1, 5),
+      life: kind === "smoke" ? rnd(1.4, 2.8) : kind === "spark" ? rnd(0.18, 0.40) : rnd(0.6, 1.3),
+      age: 0, sz: kind === "smoke" ? rnd(2.6, 5.2) : rnd(1.1, 2.2),
+      tint: tint || null,
+    });
+  }
+}
+/* a steady plume off a car that is still running but hurt */
+function fxTrail(kind, wx, wy, tint) {
+  if (FX.length > FX_MAX) return;
+  FX.push({ k: kind, x: wx, y: wy, z: rnd(0, 1.2),
+    vx: rnd(-3, 3), vy: rnd(-3, 3), vz: rnd(5, 11),
+    life: rnd(0.7, 1.5), age: 0, sz: rnd(1.2, 2.6), tint: tint || null });
+}
+
+function updateFX(dt) {
+  SHAKE = Math.max(0, SHAKE - dt * 22);
+  for (let i = FX.length - 1; i >= 0; i--) {
+    const p = FX[i];
+    p.age += dt;
+    if (p.age >= p.life) { FX.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    /* drag, and gravity on anything solid */
+    const drag = p.k === "smoke" ? 0.90 : 0.82;
+    p.vx *= Math.pow(drag, dt * 60 / 60 + dt);
+    p.vy *= Math.pow(drag, dt * 60 / 60 + dt);
+    if (p.k === "debris" || p.k === "spark") {
+      p.vz -= 46 * dt;
+      if (p.z < 0) { p.z = 0; p.vz *= -0.34; p.vx *= 0.6; p.vy *= 0.6; }
+    } else {
+      p.vz *= 0.97;
+      p.sz += dt * (p.k === "smoke" ? 2.4 : 1.2);      // smoke expands as it cools
+    }
+  }
+}
+
+const FX_SMOKE = ["#2c2f36", "#4a4f59", "#6c727d", "#8f95a1"];
+const FX_DUST  = ["#7a6a4e", "#96866a", "#b0a184", "#c8bda6"];
+const FX_SPARK = ["#fff3b0", "#ffd23f", "#ff9d2e", "#e8542a"];
+
+/* Batched by colour and by a coarse alpha step.
+
+   One fillRect per particle also means one fillStyle and one globalAlpha
+   assignment per particle, and those state changes cost more than the
+   rectangle does — three hundred of them put the busiest track at 13ms a
+   frame, which is fine on a desktop and not fine on a phone.  Bucketing
+   by appearance turns hundreds of state changes into a handful. */
+let FX_BUCKETS = new Map();
+function drawFX() {
+  if (!FX.length || !VIEW) return;
+  const u = Math.max(1, PX * 0.9);
+  FX_BUCKETS.clear();
+  for (const p of FX) {
+    const t = p.age / p.life;
+    const s = W2S({ x: p.x, y: p.y });
+    if (!onScreen(s, 60)) continue;
+    const y = s.y - p.z * VIEW.sc * SQ;
+    let col, alpha;
+    if (p.k === "spark") { col = FX_SPARK[Math.min(3, Math.floor(t * 4))]; alpha = 1 - t; }
+    else if (p.k === "debris") { col = p.tint || "#3a3f49"; alpha = (1 - t * t) * 0.9; }
+    else if (p.k === "dust") { col = FX_DUST[Math.min(3, Math.floor(t * 4))]; alpha = (1 - t * t) * 0.9; }
+    else { col = FX_SMOKE[Math.min(3, Math.floor(t * 4))]; alpha = (1 - t) * 0.55; }
+    const a = Math.max(1, Math.round(alpha * 5));          // five alpha steps is plenty
+    const key = col + "|" + a;
+    let arr = FX_BUCKETS.get(key);
+    if (!arr) { arr = []; FX_BUCKETS.set(key, arr); }
+    const sz = Math.max(1, Math.round(p.sz * u * (p.k === "smoke" ? (0.6 + t) : 1)));
+    arr.push(s.x - sz / 2, y - sz / 2, sz);
+  }
+  for (const [key, arr] of FX_BUCKETS) {
+    const bar = key.indexOf("|");
+    cx.fillStyle = key.slice(0, bar);
+    cx.globalAlpha = (+key.slice(bar + 1)) / 5;
+    for (let i = 0; i < arr.length; i += 3)
+      cx.fillRect(Math.round(arr[i]), Math.round(arr[i + 1]), arr[i + 2], arr[i + 2]);
+  }
+  cx.globalAlpha = 1;
+}
+function resetFX() { FX = []; }
+
 </script>
 <script>
 /* ============================================================
@@ -5424,12 +5632,84 @@ let dlgStack = [], toastT = null;
 
 /* ---------- audio ---------- */
 let AC = null;
+/* A short burst of noise, shaped.  Square waves are fine for a menu blip
+   but nothing made of tone sounds like sheet metal hitting a wall, so the
+   impacts are filtered noise instead. */
+let NOISE_BUF = null;
+function noiseBuffer() {
+  if (NOISE_BUF) return NOISE_BUF;
+  const n = Math.floor(AC.sampleRate * 1.2);
+  NOISE_BUF = AC.createBuffer(1, n, AC.sampleRate);
+  const d = NOISE_BUF.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return NOISE_BUF;
+}
+function noiseHit(when, dur, gain, freq, q, type, slideTo) {
+  const src = AC.createBufferSource();
+  src.buffer = noiseBuffer();
+  src.loop = true;
+  const f = AC.createBiquadFilter();
+  f.type = type || "bandpass";
+  f.frequency.setValueAtTime(freq, when);
+  if (slideTo) f.frequency.exponentialRampToValueAtTime(slideTo, when + dur);
+  f.Q.value = q || 1;
+  const v = AC.createGain();
+  v.gain.setValueAtTime(0.0001, when);
+  v.gain.exponentialRampToValueAtTime(gain, when + Math.min(0.012, dur * 0.2));
+  v.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  src.connect(f); f.connect(v); v.connect(AC.destination);
+  src.start(when); src.stop(when + dur + 0.02);
+}
+/* a low body thump under an impact, so it has weight */
+function thump(when, dur, gain, f0, f1) {
+  const o = AC.createOscillator(), v = AC.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(f0, when);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), when + dur);
+  v.gain.setValueAtTime(gain, when);
+  v.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+  o.connect(v); v.connect(AC.destination);
+  o.start(when); o.stop(when + dur + 0.02);
+}
+
 function sfx(kind) {
   if (!G || !G.set.sfx) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
     const t = AC.currentTime;
+
+    /* the noise-based ones */
+    if (kind === "crash" || kind === "bigcrash") {
+      const big = kind === "bigcrash";
+      thump(t, big ? 0.55 : 0.34, big ? 0.55 : 0.34, big ? 150 : 190, 32);
+      noiseHit(t, big ? 0.42 : 0.26, big ? 0.42 : 0.28, 2200, 0.7, "bandpass", 500);
+      noiseHit(t + 0.05, big ? 0.7 : 0.4, big ? 0.3 : 0.18, 900, 1.4, "bandpass", 240);
+      if (big) {                                  // secondary hits: cars piling in
+        noiseHit(t + 0.20, 0.30, 0.26, 1700, 0.8, "bandpass", 420);
+        thump(t + 0.22, 0.34, 0.34, 130, 30);
+        noiseHit(t + 0.44, 0.26, 0.18, 1400, 0.9, "bandpass", 380);
+      }
+      return;
+    }
+    if (kind === "scrape") {                      // along the wall
+      noiseHit(t, 0.5, 0.16, 3200, 6, "bandpass", 2100);
+      return;
+    }
+    if (kind === "squeal") {                      // locked tyres
+      const o = AC.createOscillator(), v = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
+      o.type = "sawtooth"; o.frequency.value = 1250;
+      lfo.frequency.value = 26; lg.gain.value = 90;
+      lfo.connect(lg); lg.connect(o.frequency);
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(0.10, t + 0.05);
+      v.gain.exponentialRampToValueAtTime(0.0008, t + 0.55);
+      const f = AC.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1400; f.Q.value = 5;
+      o.connect(f); f.connect(v); v.connect(AC.destination);
+      o.start(t); lfo.start(t); o.stop(t + 0.58); lfo.stop(t + 0.58);
+      return;
+    }
+
     const seq = { click: [[660, .04, .035]], ok: [[520, .06, .05], [790, .08, .055]],
       cash: [[880, .05, .05], [1170, .09, .06], [1560, .1, .05]],
       bad: [[200, .16, .07]], aura: [[440, .05, .06], [660, .05, .06], [990, .14, .07]],
@@ -5859,7 +6139,7 @@ function scrParts_unused() {
   if (car.parts.length >= s.exp)
     h += "<div class='small r' style='margin-top:6px'>All slots full — tap a slot to remove that part, or build a machine with more slots.</div>";
 
-  /* everything you have researched, grouped by category */
+  /* everything on the shelf, grouped by category */
   const owned = PARTS.filter(p => G.known.parts.includes(p.id));
   let cat = "";
   if (!owned.length) h += "<h4>Nothing on the shelf</h4><div class='small dim'>Buy parts in the Shop.</div>";
@@ -5907,7 +6187,7 @@ function partCostUI(p) {
 }
 
 /* ============================================================
-   RESEARCH
+   SHOP
    ============================================================ */
 let SEG_RES = "car";
 function segBar(opts, cur, fn) {
@@ -6303,14 +6583,14 @@ function nextStep() {
   const nc = shopCars().filter(c => G.money >= c.cost && !G.cars.some(x => x.id === c.id));
   const np = shopParts().filter(p => G.money >= p.cost && !invCount(p.id));
   if (nc.length || np.length)
-    return { t: "You can research <b>" + ((nc[0] || np[0]).name) + "</b> with your research data.", b: "Research", f: scrResearch };
+    return { t: "The shop has <b>" + ((nc[0] || np[0]).name) + "</b> in stock and you can afford it.", b: "Shop", f: () => scrShop(nc[0] ? "cars" : "parts") };
 
   if (car.parts.length < st.exp && G.known.parts.some(id => G.money >= byId(PARTS, id).cost))
     return { t: "#" + car.num + " has an <b>empty part slot</b>. Fitting a part makes it faster.", b: "Parts", f: scrParts };
 
   const gl = GARAGES[G.garage + 1];
   if (gl && (!gl.req || G.seriesWon[gl.req]) && G.money >= gl.cost)
-    return { t: "You can afford the <b>" + gl.n + "</b> — more crew, more machines, more teams.", b: "Upgrade", f: scrResearch };
+    return { t: "You can afford the <b>" + gl.n + "</b> \u2014 more crew, more machines, more teams.", b: "Upgrade", f: () => scrShop("garage") };
 
   const trainable = TRAININGS.filter(x => G.known.trains.includes(x.id) && G.money >= x.c && drv.energy >= x.e);
   if (trainable.length && G.money > 200)
@@ -6496,7 +6776,7 @@ function loop(ts) {
         const steps = clamp(G.set.speed | 0, 1, 3);
         for (let i = 0; i < steps && R; i++) raceTick(dt);
       }
-      if (R) { drawRace(); updateRaceHud(); }
+      if (R) { updateFX(dt); drawRace(); updateRaceHud(); }
       else drawGarage();
     } catch (e) { fatal("race", e); }
     return;

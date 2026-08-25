@@ -8,12 +8,84 @@ let dlgStack = [], toastT = null;
 
 /* ---------- audio ---------- */
 let AC = null;
+/* A short burst of noise, shaped.  Square waves are fine for a menu blip
+   but nothing made of tone sounds like sheet metal hitting a wall, so the
+   impacts are filtered noise instead. */
+let NOISE_BUF = null;
+function noiseBuffer() {
+  if (NOISE_BUF) return NOISE_BUF;
+  const n = Math.floor(AC.sampleRate * 1.2);
+  NOISE_BUF = AC.createBuffer(1, n, AC.sampleRate);
+  const d = NOISE_BUF.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return NOISE_BUF;
+}
+function noiseHit(when, dur, gain, freq, q, type, slideTo) {
+  const src = AC.createBufferSource();
+  src.buffer = noiseBuffer();
+  src.loop = true;
+  const f = AC.createBiquadFilter();
+  f.type = type || "bandpass";
+  f.frequency.setValueAtTime(freq, when);
+  if (slideTo) f.frequency.exponentialRampToValueAtTime(slideTo, when + dur);
+  f.Q.value = q || 1;
+  const v = AC.createGain();
+  v.gain.setValueAtTime(0.0001, when);
+  v.gain.exponentialRampToValueAtTime(gain, when + Math.min(0.012, dur * 0.2));
+  v.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  src.connect(f); f.connect(v); v.connect(AC.destination);
+  src.start(when); src.stop(when + dur + 0.02);
+}
+/* a low body thump under an impact, so it has weight */
+function thump(when, dur, gain, f0, f1) {
+  const o = AC.createOscillator(), v = AC.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(f0, when);
+  o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), when + dur);
+  v.gain.setValueAtTime(gain, when);
+  v.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+  o.connect(v); v.connect(AC.destination);
+  o.start(when); o.stop(when + dur + 0.02);
+}
+
 function sfx(kind) {
   if (!G || !G.set.sfx) return;
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === "suspended") AC.resume();
     const t = AC.currentTime;
+
+    /* the noise-based ones */
+    if (kind === "crash" || kind === "bigcrash") {
+      const big = kind === "bigcrash";
+      thump(t, big ? 0.55 : 0.34, big ? 0.55 : 0.34, big ? 150 : 190, 32);
+      noiseHit(t, big ? 0.42 : 0.26, big ? 0.42 : 0.28, 2200, 0.7, "bandpass", 500);
+      noiseHit(t + 0.05, big ? 0.7 : 0.4, big ? 0.3 : 0.18, 900, 1.4, "bandpass", 240);
+      if (big) {                                  // secondary hits: cars piling in
+        noiseHit(t + 0.20, 0.30, 0.26, 1700, 0.8, "bandpass", 420);
+        thump(t + 0.22, 0.34, 0.34, 130, 30);
+        noiseHit(t + 0.44, 0.26, 0.18, 1400, 0.9, "bandpass", 380);
+      }
+      return;
+    }
+    if (kind === "scrape") {                      // along the wall
+      noiseHit(t, 0.5, 0.16, 3200, 6, "bandpass", 2100);
+      return;
+    }
+    if (kind === "squeal") {                      // locked tyres
+      const o = AC.createOscillator(), v = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
+      o.type = "sawtooth"; o.frequency.value = 1250;
+      lfo.frequency.value = 26; lg.gain.value = 90;
+      lfo.connect(lg); lg.connect(o.frequency);
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(0.10, t + 0.05);
+      v.gain.exponentialRampToValueAtTime(0.0008, t + 0.55);
+      const f = AC.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1400; f.Q.value = 5;
+      o.connect(f); f.connect(v); v.connect(AC.destination);
+      o.start(t); lfo.start(t); o.stop(t + 0.58); lfo.stop(t + 0.58);
+      return;
+    }
+
     const seq = { click: [[660, .04, .035]], ok: [[520, .06, .05], [790, .08, .055]],
       cash: [[880, .05, .05], [1170, .09, .06], [1560, .1, .05]],
       bad: [[200, .16, .07]], aura: [[440, .05, .06], [660, .05, .06], [990, .14, .07]],
@@ -443,7 +515,7 @@ function scrParts_unused() {
   if (car.parts.length >= s.exp)
     h += "<div class='small r' style='margin-top:6px'>All slots full — tap a slot to remove that part, or build a machine with more slots.</div>";
 
-  /* everything you have researched, grouped by category */
+  /* everything on the shelf, grouped by category */
   const owned = PARTS.filter(p => G.known.parts.includes(p.id));
   let cat = "";
   if (!owned.length) h += "<h4>Nothing on the shelf</h4><div class='small dim'>Buy parts in the Shop.</div>";
@@ -491,7 +563,7 @@ function partCostUI(p) {
 }
 
 /* ============================================================
-   RESEARCH
+   SHOP
    ============================================================ */
 let SEG_RES = "car";
 function segBar(opts, cur, fn) {
@@ -887,14 +959,14 @@ function nextStep() {
   const nc = shopCars().filter(c => G.money >= c.cost && !G.cars.some(x => x.id === c.id));
   const np = shopParts().filter(p => G.money >= p.cost && !invCount(p.id));
   if (nc.length || np.length)
-    return { t: "You can research <b>" + ((nc[0] || np[0]).name) + "</b> with your research data.", b: "Research", f: scrResearch };
+    return { t: "The shop has <b>" + ((nc[0] || np[0]).name) + "</b> in stock and you can afford it.", b: "Shop", f: () => scrShop(nc[0] ? "cars" : "parts") };
 
   if (car.parts.length < st.exp && G.known.parts.some(id => G.money >= byId(PARTS, id).cost))
     return { t: "#" + car.num + " has an <b>empty part slot</b>. Fitting a part makes it faster.", b: "Parts", f: scrParts };
 
   const gl = GARAGES[G.garage + 1];
   if (gl && (!gl.req || G.seriesWon[gl.req]) && G.money >= gl.cost)
-    return { t: "You can afford the <b>" + gl.n + "</b> — more crew, more machines, more teams.", b: "Upgrade", f: scrResearch };
+    return { t: "You can afford the <b>" + gl.n + "</b> \u2014 more crew, more machines, more teams.", b: "Upgrade", f: () => scrShop("garage") };
 
   const trainable = TRAININGS.filter(x => G.known.trains.includes(x.id) && G.money >= x.c && drv.energy >= x.e);
   if (trainable.length && G.money > 200)

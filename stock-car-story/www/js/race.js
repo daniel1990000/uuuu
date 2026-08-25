@@ -51,7 +51,7 @@ function makeEntry(name, team, perf, col, num, opts) {
     tyre: "medium", mode: "normal", pitArmed: 0, pitKind: "both",
     /* crash state: heat is how close this car is to a mistake, spin is the
        seconds it spends gathering one up, damage slows it for good */
-    heat: 0, spin: 0, damage: 0, wrecked: 0, nudge: 0,
+    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0,
   }, opts || {});
 }
 
@@ -163,6 +163,7 @@ function startRace(track, season, auraTier) {
     c.lap = 0;
   });
   if (typeof resetRaceView === "function") resetRaceView();
+  if (typeof resetFX === "function") resetFX();
   const pQual = grid.findIndex(c => c.isP) + 1;
 
   R = {
@@ -342,8 +343,22 @@ function raceTick(dt) {
       c.v = Math.max(0, c.v - 26 * dt);
       c.s += c.v * dt;
       c.lane = clamp(c.lane + c.nudge * dt, 0.04, 0.96);
-      if (c.spin <= 0) c.nudge = 0;
+      /* the car swaps ends: spinRate is set when it lets go, and the
+         renderer adds spinAng to the heading, so you watch it happen */
+      c.spinAng = (c.spinAng || 0) + (c.spinRate || 6) * dt;
+      if (typeof fxTrail === "function" && c.v > 4) {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);               // tyre smoke off locked wheels
+      }
+      if (c.spin <= 0) { c.nudge = 0; c.spinRate = 0; c.spinAng = 0; }
       continue;
+    }
+    /* a hurt car trails smoke for the rest of the day */
+    if (c.damage > 24 && Math.random() < c.damage / 900) {
+      if (typeof fxTrail === "function") {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);
+      }
     }
 
     const sample = sampleTrack(tk, c.s);
@@ -476,7 +491,12 @@ function raceTick(dt) {
       c.s -= tk.len; c.lap++;
       if (c === R.leader) onLeaderLap();
       const md = MODES[c.mode] || MODES.normal;
-      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2) *
+      /* How twisty the lap is does not change during a race, so measure it
+         once.  It was being recomputed on every lap crossing by every car,
+         and that scan walks the entire lap — sixteen cars round a short
+         circuit made it one of the most-run pieces of code in the game. */
+      if (tk.avgCurv == null) tk.avgCurv = curvatureAhead(tk, 0, tk.len);
+      const wearT = (100 / (track.laps * 0.55)) * (1 + tk.avgCurv * 1.2) *
         tset.wear * md.wear;
       const wearF = (100 / (track.laps * 0.80 * c.fuelMul)) * md.fuel;
       c.tyreLife = Math.max(0, c.tyreLife - wearT * rnd(0.85, 1.15) * 0.55);
@@ -563,9 +583,14 @@ function carMistake(c, tk, curv) {
   }
   if (r < slide) {                         // a slide, a couple of seconds
     c.spin = rnd(0.5, 1.1);
+    c.spinRate = (Math.random() < 0.5 ? -1 : 1) * rnd(4, 8);
     c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.15, 0.4);
     c.v *= 0.62;
-    if (c.isP) { banner("LOOSE! YOU LOSE GROUND", 1.6); sfx("bad"); }
+    const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+    if (typeof fxBurst === "function") fxBurst("smoke", wp.x, wp.y, 12);
+    if (typeof fxShake === "function" && c.isP) fxShake(3);
+    sfx("squeal");
+    if (c.isP) banner("LOOSE! YOU LOSE GROUND", 1.6);
     return;
   }
   wreck(c, tk, curv, Math.random() < 0.28);
@@ -587,8 +612,20 @@ function wreck(lead, tk, curv, heavy) {
   }
   for (const c of collected) {
     c.spin = rnd(1.1, 2.2);
+    c.spinRate = (Math.random() < 0.5 ? -1 : 1) * rnd(7, 14);
     c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.3, 0.7);
     c.v *= 0.25;
+    /* the impact itself: dust off the surface, panels leaving the car,
+       and sparks where it is grinding along the wall */
+    const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+    if (typeof fxBurst === "function") {
+      fxBurst("dust",   wp.x, wp.y, heavy ? 22 : 13);
+      fxBurst("debris", wp.x, wp.y, heavy ? 20 : 11, c.col);
+      fxBurst("spark",  wp.x, wp.y, heavy ? 22 : 13);
+      fxBurst("smoke",  wp.x, wp.y, heavy ? 18 : 11);
+    }
+    if (typeof fxShake === "function" && (c.isP || collected.length > 1))
+      fxShake(heavy ? 8 : 5);
     const hit = ri(heavy ? 18 : 8, heavy ? 46 : 24);
     c.damage = Math.min(100, c.damage + hit);
     c.wrecked = 1;
@@ -599,8 +636,9 @@ function wreck(lead, tk, curv, heavy) {
       if (c.isP) { banner("YOU'RE OUT — TOO MUCH DAMAGE", 3); sfx("bad"); }
     }
   }
+  sfx(heavy ? "bigcrash" : "crash");
   const me = collected.find(c => c.isP);
-  if (me) { if (!me.dnf) sfx("bad"); banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4); }
+  if (me) banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4);
   else banner(collected.length > 2 ? "BIG WRECK — " + collected.length + " CARS"
                                    : "CAUTION — CAR IN THE FENCE", 2.4);
   if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(6, 10); R.cautions++; bunchField(); sfx("yellow"); }
@@ -668,12 +706,24 @@ function resolveContact(dt) {
 
      Correcting by the radius ratio makes the requirement mean the same
      thing everywhere. */
+  /* Computed once per car per tick and cached on the car.
+
+     This used to be a function called inside the pair loops, and it samples
+     the track — so a sixteen-car field ran well over a thousand track
+     samples per tick, three passes a frame.  That, not the drawing, is what
+     put the tight street circuit near thirteen milliseconds a frame. */
   const needGap = (c) => {
+    if (c._ngT === R.t) return c._ng;
     const p = sampleTrack(tk, c.s);
-    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
-    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
-    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
-    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    let v;
+    if (Math.abs(p.cs) < 0.02) v = CAR_LEN;
+    else {
+      const r = 100 / Math.max(0.05, Math.abs(p.cs));    // curv = min(1, 100/r)
+      const o = laneWorld(c.lane) * Math.sign(p.cs);     // toward the inside
+      v = CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    }
+    c._ngT = R.t; c._ng = v;
+    return v;
   };
 
   /* Two passes: separating one pair can push a car into another, and a
@@ -708,7 +758,10 @@ function resolveContact(dt) {
           ah.heat += hard ? 0.12 : 0.035;
           if (hard) {
             ah.v *= 0.93;
-            if (ah.isP || c.isP) { banner("CONTACT!", 1.2); sfx("bad"); }
+            const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+            if (typeof fxBurst === "function") fxBurst("spark", wp.x, wp.y, 4);
+            sfx("scrape");
+            if (ah.isP || c.isP) banner("CONTACT!", 1.2);
           }
         }
         const push = (c.lane <= ah.lane ? -1 : 1) * 0.55 * dt;
@@ -791,12 +844,24 @@ function bunchField() {
 
      Correcting by the radius ratio makes the requirement mean the same
      thing everywhere. */
+  /* Computed once per car per tick and cached on the car.
+
+     This used to be a function called inside the pair loops, and it samples
+     the track — so a sixteen-car field ran well over a thousand track
+     samples per tick, three passes a frame.  That, not the drawing, is what
+     put the tight street circuit near thirteen milliseconds a frame. */
   const needGap = (c) => {
+    if (c._ngT === R.t) return c._ng;
     const p = sampleTrack(tk, c.s);
-    if (Math.abs(p.cs) < 0.02) return CAR_LEN;
-    const r = 100 / Math.max(0.05, Math.abs(p.cs));      // curv = min(1, 100/r)
-    const o = laneWorld(c.lane) * Math.sign(p.cs);       // toward the inside
-    return CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    let v;
+    if (Math.abs(p.cs) < 0.02) v = CAR_LEN;
+    else {
+      const r = 100 / Math.max(0.05, Math.abs(p.cs));    // curv = min(1, 100/r)
+      const o = laneWorld(c.lane) * Math.sign(p.cs);     // toward the inside
+      v = CAR_LEN / clamp(1 - o / r, 0.35, 1.6);
+    }
+    c._ngT = R.t; c._ng = v;
+    return v;
   };
   live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
   const leader = live[0];

@@ -860,6 +860,12 @@ function tree(x, y, s, kind) {
 
 function drawRace() {
   const tk = R.tk, track = R.track;
+  /* apply the shake to the whole scene, then take it off again at the end */
+  const shaking = SHAKE > 0.05;
+  if (shaking) {
+    cx.save();
+    cx.translate(Math.round(rnd(-SHAKE, SHAKE)), Math.round(rnd(-SHAKE, SHAKE)));
+  }
   if (!VIEW) setupView(tk);
   const me = R.field[0];
   camFollow(sampleTrack(tk, me.s + 16));
@@ -987,7 +993,9 @@ function drawRace() {
   const drawn = R.field.filter(c => !(c.dnf && c.done)).map(c => {
     const p = sampleTrack(tk, c.s);
     const w = W2S(offsetPoint(p, laneOffset(c.lane)));
-    return { c, w, ang: p.h + VIEW.rot };
+    /* spinAng is what makes a spin look like a spin rather than a car
+       sliding along still pointing forwards */
+    return { c, w, ang: p.h + VIEW.rot + (c.spinAng || 0) };
   }).filter(o => onScreen(o.w, 60));
   drawn.sort((a, b) => a.w.y - b.w.y);
   for (const o of drawn) {
@@ -1029,12 +1037,18 @@ function drawRace() {
     cx.globalAlpha = 1;
   }
 
+  /* smoke, dust, debris and sparks sit above the cars so a wreck reads
+     as happening on top of the track rather than under it */
+  drawFX();
+
   drawGantry(tk, HALF);
 
   if (R.yellow) {
     cx.fillStyle = "rgba(233,161,27,.15)"; cx.fillRect(0, 0, CW, CH);
     for (let i = 0; i < CW; i += 34) px(i, 0, 17, 4, "#e9a11b");
   }
+  if (shaking) cx.restore();          // HUD must not shake with the world
+
   drawMiniMap(tk);
   if (R.phase === "grid") {
     const n = Math.ceil(R.timer);
@@ -1073,9 +1087,19 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
 
   /* Grandstand: a raked deck with a front railing, aisles that split it
      into sections, entrance tunnels at the base and a roof on columns. */
+  /* A frame budget for the crowd.
+
+     Grandstands were the most expensive thing in the game by a distance:
+     6.7ms of a 9ms frame on the tight street circuit, where the camera can
+     see most of the lap at once and every visible section was drawn in
+     full with a crowd in it.  Sections are capped and the crowd has a
+     sprite budget; both spend themselves nearest-first, so what you lose
+     is people in the far corner of a stand you can barely see. */
+  let standBudget = 13, crowdBudget = 240;
   const standStep = Math.max(8, step * 3);
   for (let d = Math.floor(d0 / standStep) * standStep; d <= d1; d += standStep) {
     if (!onStraight(d)) continue;
+    if (standBudget-- <= 0) break;
     const p = sampleTrack(tk, d);
     const p2 = sampleTrack(tk, d + standStep * 1.02);
     const main = isMain(d);
@@ -1118,6 +1142,7 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
         const t2 = (k + 0.35) / n;
         const sd2 = seed + k * 13;
         if (sd2 % 12 === 0) continue;                        // an empty seat here and there
+        if (crowdBudget-- <= 0) continue;
         spectator(sA.x + (sB.x - sA.x) * t2 - 2 * PX,
                   sA.y + (sB.y - sA.y) * t2 - 11 * PX, sd2, ((frame >> 4) + sd2) % 4 === 0);
       }
@@ -1163,9 +1188,11 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   const segs = [];
   for (let d = d0; d <= d1; d += wStep) segs.push(W2S(offsetPoint(sampleTrack(tk, d), -HALF - 2.2)));
   cx.lineCap = "butt"; cx.lineJoin = "round";
+  let wallBudget = 34;
   for (let i = 0; i < segs.length - 1; i++) {
     const a = segs[i], b = segs[i + 1];
     if (!onScreen(a, 70) && !onScreen(b, 70)) continue;
+    if (wallBudget-- <= 0) break;
     const k = Math.abs(Math.floor((d0 + i * wStep) / 11));
     /* the authored panel face */
     stripTex([a, b], -wallH, street ? "concwall" : "safer", Math.max(1, wallH / 12), 0);
@@ -1185,12 +1212,18 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
   }
   cx.stroke();
 
-  /* catch fence: authored mesh between real posts */
+  /* Catch fence: authored mesh between real posts.
+
+     Budgeted like the crowd.  Every visible wall segment used to get its
+     own textured strip, and on a circuit where the camera sees most of the
+     lap that is a lot of large fills for something you look through. */
   if (VIEW.sc > 1.8) {
     const fh = wallH * 2.6;
+    let fenceBudget = 26;
     for (let i = 0; i < segs.length - 1; i++) {
       const a = segs[i], b = segs[i + 1];
       if (!onScreen(a, 60) && !onScreen(b, 60)) continue;
+      if (fenceBudget-- <= 0) break;
       stripTex([a, b], -fh, "fence", Math.max(1, PX * 0.7), wallH);
     }
     for (let i = 0; i < segs.length - 1; i += 2) {
@@ -1373,3 +1406,113 @@ function straightRuns(tk) {
   return runs;
 }
 function resetRaceView() { VIEW = null; SCENE = null; }
+
+/* ============================================================
+   CRASH EFFECTS
+
+   A wreck used to be a number changing: the car slowed, a banner said
+   so, and nothing on screen looked like an accident.  These are the bits
+   that make it read as one — tyre smoke off a locked wheel, the dust and
+   debris of a hit, sparks off the wall, and a plume trailing a damaged
+   car for the rest of the race.
+
+   Particles live in world space so they stay where the accident happened
+   while the camera moves on, and carry a height so smoke rises off the
+   surface instead of sliding along it.
+   ============================================================ */
+let FX = [];
+const FX_MAX = 300;
+/* A hit you feel.  Two frames of camera displacement does more for the
+   weight of a crash than any amount of extra debris. */
+let SHAKE = 0;
+function fxShake(amount) { SHAKE = Math.min(9, SHAKE + amount); }
+
+/* kind: smoke | dust | debris | spark */
+function fxBurst(kind, wx, wy, power, tint) {
+  if (FX.length > FX_MAX) return;
+  const n = Math.round(clamp(power, 1, 26));
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = (kind === "debris" ? 26 : kind === "spark" ? 34 : 9) * rnd(0.35, 1.25);
+    FX.push({
+      k: kind, x: wx, y: wy, z: kind === "smoke" ? rnd(0, 2) : 0,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      vz: kind === "smoke" ? rnd(7, 15) : kind === "debris" ? rnd(9, 22) : rnd(1, 5),
+      life: kind === "smoke" ? rnd(1.4, 2.8) : kind === "spark" ? rnd(0.18, 0.40) : rnd(0.6, 1.3),
+      age: 0, sz: kind === "smoke" ? rnd(2.6, 5.2) : rnd(1.1, 2.2),
+      tint: tint || null,
+    });
+  }
+}
+/* a steady plume off a car that is still running but hurt */
+function fxTrail(kind, wx, wy, tint) {
+  if (FX.length > FX_MAX) return;
+  FX.push({ k: kind, x: wx, y: wy, z: rnd(0, 1.2),
+    vx: rnd(-3, 3), vy: rnd(-3, 3), vz: rnd(5, 11),
+    life: rnd(0.7, 1.5), age: 0, sz: rnd(1.2, 2.6), tint: tint || null });
+}
+
+function updateFX(dt) {
+  SHAKE = Math.max(0, SHAKE - dt * 22);
+  for (let i = FX.length - 1; i >= 0; i--) {
+    const p = FX[i];
+    p.age += dt;
+    if (p.age >= p.life) { FX.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    /* drag, and gravity on anything solid */
+    const drag = p.k === "smoke" ? 0.90 : 0.82;
+    p.vx *= Math.pow(drag, dt * 60 / 60 + dt);
+    p.vy *= Math.pow(drag, dt * 60 / 60 + dt);
+    if (p.k === "debris" || p.k === "spark") {
+      p.vz -= 46 * dt;
+      if (p.z < 0) { p.z = 0; p.vz *= -0.34; p.vx *= 0.6; p.vy *= 0.6; }
+    } else {
+      p.vz *= 0.97;
+      p.sz += dt * (p.k === "smoke" ? 2.4 : 1.2);      // smoke expands as it cools
+    }
+  }
+}
+
+const FX_SMOKE = ["#2c2f36", "#4a4f59", "#6c727d", "#8f95a1"];
+const FX_DUST  = ["#7a6a4e", "#96866a", "#b0a184", "#c8bda6"];
+const FX_SPARK = ["#fff3b0", "#ffd23f", "#ff9d2e", "#e8542a"];
+
+/* Batched by colour and by a coarse alpha step.
+
+   One fillRect per particle also means one fillStyle and one globalAlpha
+   assignment per particle, and those state changes cost more than the
+   rectangle does — three hundred of them put the busiest track at 13ms a
+   frame, which is fine on a desktop and not fine on a phone.  Bucketing
+   by appearance turns hundreds of state changes into a handful. */
+let FX_BUCKETS = new Map();
+function drawFX() {
+  if (!FX.length || !VIEW) return;
+  const u = Math.max(1, PX * 0.9);
+  FX_BUCKETS.clear();
+  for (const p of FX) {
+    const t = p.age / p.life;
+    const s = W2S({ x: p.x, y: p.y });
+    if (!onScreen(s, 60)) continue;
+    const y = s.y - p.z * VIEW.sc * SQ;
+    let col, alpha;
+    if (p.k === "spark") { col = FX_SPARK[Math.min(3, Math.floor(t * 4))]; alpha = 1 - t; }
+    else if (p.k === "debris") { col = p.tint || "#3a3f49"; alpha = (1 - t * t) * 0.9; }
+    else if (p.k === "dust") { col = FX_DUST[Math.min(3, Math.floor(t * 4))]; alpha = (1 - t * t) * 0.9; }
+    else { col = FX_SMOKE[Math.min(3, Math.floor(t * 4))]; alpha = (1 - t) * 0.55; }
+    const a = Math.max(1, Math.round(alpha * 5));          // five alpha steps is plenty
+    const key = col + "|" + a;
+    let arr = FX_BUCKETS.get(key);
+    if (!arr) { arr = []; FX_BUCKETS.set(key, arr); }
+    const sz = Math.max(1, Math.round(p.sz * u * (p.k === "smoke" ? (0.6 + t) : 1)));
+    arr.push(s.x - sz / 2, y - sz / 2, sz);
+  }
+  for (const [key, arr] of FX_BUCKETS) {
+    const bar = key.indexOf("|");
+    cx.fillStyle = key.slice(0, bar);
+    cx.globalAlpha = (+key.slice(bar + 1)) / 5;
+    for (let i = 0; i < arr.length; i += 3)
+      cx.fillRect(Math.round(arr[i]), Math.round(arr[i + 1]), arr[i + 2], arr[i + 2]);
+  }
+  cx.globalAlpha = 1;
+}
+function resetFX() { FX = []; }
