@@ -1,6 +1,6 @@
 /* Stock Car Story — offline cache.
    Bump CACHE on every release so returning players get the new build. */
-const CACHE = "scs-v8";
+const CACHE = "scs-v9";
 const ASSETS = [
   ".", "index.html",
   "css/game.css",

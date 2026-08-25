@@ -75,10 +75,33 @@ function buildField(track, season) {
   const cols = TEAMC.slice();
   /* Rival strength tracks the player so racing stays competitive, but the
      tier still matters: club events stay winnable, the Cup stays hard. */
-  const tierFloor = 24 + track.fee * 1.9;
-  const band = season ? { rookie: 0.86, national: 0.95, cup: 1.04 }[season.def.id] || 0.95
-                      : clamp(0.80 + track.fee / 190, 0.80, 1.00);
-  const scaled = Math.max(tierFloor, perf * band);
+  /* What this event's field is worth on its own, regardless of who turns
+     up in it.  A club bullring draws club cars; the crown jewel draws the
+     best in the country. */
+  const anchor = 61 + track.fee * 1.5;
+  /* How strong the field is relative to you.  This used to bottom out at
+     0.80, which with the spread meant the quickest car in a club race came
+     out slower than yours before the green — ten rookie races, ten wins.
+     The floor is up so the front of the field can beat you anywhere, and
+     the tier still decides how hard that is. */
+  const band = season ? { rookie: 0.90, national: 0.98, cup: 1.05 }[season.def.id] || 0.98
+                      : clamp(0.88 + track.fee / 240, 0.88, 1.06);
+  /* Rival strength was scaled off the player alone, which is a pure rubber
+     band: build a better car and the whole field improves with it, so the
+     same race happens at every stage of a career and you can never outgrow
+     an event.  It also left no working difficulty setting — anything that
+     made the opening races a contest made a ten-year career winless.
+
+     Taking whichever is higher fixes both.  Early on the anchor binds and
+     a club race is a real fight; once your own car is worth more than the
+     event, the band takes over and the field tracks you again, so the
+     small tracks become the formality they should be without the top of
+     the sport ever going soft.
+
+     Blending the two instead was tried and is wrong: your performance
+     climbs and the anchor does not, so rivals settled at about 40% of your
+     pace and the same career finished 188 of 194. */
+  const scaled = Math.max(anchor, perf * band);
   /* no duplicate drivers, teams or car numbers in a field */
   const pool = RIVAL_DRIVERS.slice(), tpool = RIVAL_TEAMS.slice();
   const nums = [car.num];
@@ -93,8 +116,17 @@ function buildField(track, season) {
          sixteen cars all capable of winning — and, more to the point, that
          there was never anybody slow enough to lap.  Spreading it gives a
          couple of genuine front-runners, a midfield, and backmarkers you
-         come up behind and have to deal with. */
-      str = scaled * (1.06 - (i / Math.max(1, n - 1)) * 0.34) * rnd(0.97, 1.03);
+         come up behind and have to deal with.
+
+         The top of that range is the difficulty dial, and it fights the
+         band: rival strength is scaled off the player's own performance, so
+         upgrading the car lifts the whole field with it.  Put the top of
+         the gradient above 1.0 and the quickest rival is faster than you
+         whatever you build, which is a career of second places — 160 races
+         and one win, with the garage never leaving level one.  Below it
+         you are quicker than everyone, and it is a race at all only
+         because a caution can take the lead back off you. */
+      str = scaled * (1.02 - (i / Math.max(1, n - 1)) * 0.34) * rnd(0.97, 1.03);
       name = pool.splice(ri(0, pool.length - 1), 1)[0] || "Privateer " + i;
       team = tpool.splice(ri(0, tpool.length - 1), 1)[0] || "Independent";
       do { num = ri(2, 99); } while (nums.includes(num));
@@ -167,28 +199,25 @@ function banner(text, secs) { if (R) { R.msg = text; R.msgT = secs; } }
    start setting up; what we just left says we are still unwinding. */
 function racingLine(tk, d, lanes) {
   const here = sampleTrack(tk, d).c;
-  const soon = curvatureAhead(tk, d, 85);
-  const past = curvatureAhead(tk, d - 85, 85);
-  const apex = lanes.lo + 0.06;              // as low as the car will go
-  const wall = lanes.hi - 0.08;              // up against the fence
+  const apex = lanes.lo + 0.05;              // as low as the car will go
+  const wall = lanes.hi - 0.06;              // up against the fence
 
-  if (here > 0.18) {
-    /* in the corner: the tighter it is, the more it is worth being at the
-       apex, and a gentle sweeper is barely worth leaving the middle for */
-    const t = clamp((here - 0.18) / 0.45, 0, 1);
-    return lanes.line + (apex - lanes.line) * t;
-  }
-  if (soon > 0.22) {
-    /* entry: swing out to open the corner up, more so the tighter it is */
-    const t = clamp((soon - 0.22) / 0.45, 0, 1);
-    return lanes.line + (wall - lanes.line) * t;
-  }
-  if (past > 0.22) {
-    /* exit: still unwinding, so let it run out toward the wall */
-    const t = clamp((past - 0.22) / 0.45, 0, 1);
-    return lanes.line + (wall - lanes.line) * t * 0.72;
-  }
-  return lanes.line;
+  /* Out-in-out, as one continuous blend rather than three cases.
+
+     The first cut only left the groove when a corner was within eighty-five
+     units, so the middle of a long straight fell through to the groove and
+     the field ran the bottom lane down the whole straightaway.  A straight
+     is run up by the fence — that is the whole point of it — so the wide
+     line is the default and the corner is what pulls the car down.
+
+     No smoothing needed at the joins: lane movement is rate-limited, so the
+     sweep from the fence to the apex IS the turn-in, and the sweep back out
+     is the track-out. */
+  const inCorner = clamp((here - 0.10) / 0.32, 0, 1);
+  const sw = lanes.swing;
+  const wide = lanes.line + (wall - lanes.line) * sw;
+  const low  = lanes.line + (apex - lanes.line) * sw;
+  return wide + (low - wide) * inCorner;
 }
 
 /* How much speed a line costs.  Away from the groove the surface is
@@ -204,14 +233,17 @@ function lineCost(tk, d, lane, lanes) {
 
 /* How many lanes a surface supports, and where the groove sits. */
 function raceLanes(surf) {
-  if (surf === "ss")   return { lo: 0.10, hi: 0.90, line: 0.34 };   // three wide
-  if (surf === "mid")  return { lo: 0.14, hi: 0.86, line: 0.34 };
-  if (surf === "road") return { lo: 0.18, hi: 0.82, line: 0.40 };
+  /* `swing` is how much of the road the racing line actually uses.  A
+     superspeedway is run in a pack down on the bottom and nobody sweeps
+     the whole width every lap; a short track and a road course do. */
+  if (surf === "ss")   return { lo: 0.10, hi: 0.90, line: 0.34, swing: 0.42 };  // three wide
+  if (surf === "mid")  return { lo: 0.14, hi: 0.86, line: 0.34, swing: 0.78 };
+  if (surf === "road") return { lo: 0.18, hi: 0.82, line: 0.40, swing: 1.00 };
   /* A street circuit is a closed public road: barely wider than two cars,
      with a wall where the run-off would be.  Passing means the braking
      zones or nothing, so the usable band is the narrowest in the game. */
-  if (surf === "street") return { lo: 0.26, hi: 0.74, line: 0.44 };
-  return { lo: 0.20, hi: 0.80, line: 0.32 };                        // short track, two wide
+  if (surf === "street") return { lo: 0.26, hi: 0.74, line: 0.44, swing: 1.00 };
+  return { lo: 0.20, hi: 0.80, line: 0.32, swing: 1.00 };           // short track, two wide
 }
 /* signed gap to another car along the lap, in world units */
 function gapTo(a, b, tk) {
@@ -390,8 +422,11 @@ function raceTick(dt) {
     if (!R.yellow) {
       const worn = clamp((45 - c.tyreLife) / 45, 0, 1);
       const load = 0.35 + curv * 1.5;
-      /* Tuned against a 30-lap short track, which is about five minutes of
-         running.  A car on fresh rubber builds less heat than it sheds and
+      /* Tuned against an 18-lap short track.  It was calibrated at 30 laps
+         first, and cutting race distance by 40% took the cautions down with
+         it: heat is a rate, so a shorter race is simply less opportunity to
+         make a mistake and the rate has to rise to keep the same number of
+         incidents in a race.  A car on fresh rubber builds less heat than it sheds and
          never makes a mistake at all; a car on a worn set in Normal reaches
          one about every hundred seconds; Push gets there roughly three
          times as often, and Conserve almost never does.
@@ -403,7 +438,7 @@ function raceTick(dt) {
          rather than setting the pace.  With decay near zero the time to a
          mistake is roughly one over the build, so the risk number in the
          mode table means what it says. */
-      let build = (0.0026 + worn * 0.0500) * load * mode.risk;
+      let build = (0.0038 + worn * 0.0740) * load * mode.risk;
       if (c.sbs) build *= 1.5;
       if (c.damage) build *= 1 + c.damage / 90;
       build *= clamp(1.5 - c.perf / 150, 0.55, 1.5);      // better cars are calmer
@@ -536,7 +571,7 @@ function wreck(lead, tk, curv, heavy) {
   if (me) { if (!me.dnf) sfx("bad"); banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4); }
   else banner(collected.length > 2 ? "BIG WRECK — " + collected.length + " CARS"
                                    : "CAUTION — CAR IN THE FENCE", 2.4);
-  if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(6, 10); R.cautions++; sfx("yellow"); }
+  if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(6, 10); R.cautions++; bunchField(); sfx("yellow"); }
 }
 
 /* ---------- separation ----------
@@ -545,30 +580,43 @@ function wreck(lead, tk, curv, heavy) {
    the same piece of road.  This runs after everyone has moved and makes
    the road solid — a car cannot be driven into the back of the one in
    front, and two side by side push each other apart rather than merge. */
-const CAR_LEN = 7.0;                 // world units, nose to tail plus a gap
-const CAR_WIDE = 0.17;               // lane units, door to door
+/* Sized off what is actually drawn.  CAR_WORLD is 5.6 units long and the
+   sprite is blitted at 1.15 of that, so a car covers about 6.4 units of
+   road; the body is roughly 46% as wide as it is long.  These are those
+   numbers with a little air, not guesses. */
+const CAR_LEN = 7.2;                 // world units, nose to tail plus a gap
+const CAR_WIDE = 0.19;               // lane units, door to door
 
 function resolveContact(dt) {
   const tk = R.tk;
+  /* A spinning car is still a car sitting in the road.  Leaving it out of
+     this list is what let the field drive straight through a spin, which
+     is the overlap that was still visible. */
   const live = R.field.filter(c => !c.done && !c.dnf && c.pit <= 0);
-  /* front to back, so each car only has to look at the one it is chasing */
-  live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
-  for (let i = 1; i < live.length; i++) {
-    const c = live[i];
-    for (let j = i - 1; j >= 0 && j >= i - 4; j--) {
-      const ah = live[j];
-      const gap = gapTo(c, ah, tk);
-      if (gap <= 0 || gap > CAR_LEN * 2) continue;
-      const dl = Math.abs(ah.lane - c.lane);
-      if (dl > CAR_WIDE) continue;                 // clear of each other sideways
-      if (gap < CAR_LEN) {
-        /* nowhere to go: hold station behind and lose the closing speed */
+  if (live.length < 2) return;
+
+  /* Two passes: separating one pair can push a car into another, and a
+     sixteen-car pack is exactly where that chains. */
+  for (let pass = 0; pass < 2; pass++) {
+    live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
+
+    /* nose to tail */
+    for (let i = 1; i < live.length; i++) {
+      const c = live[i];
+      /* Look at every car close enough to matter, not a fixed handful.
+         Capping it at the four ahead missed cars in a tight pack. */
+      for (let j = i - 1; j >= 0; j--) {
+        const ah = live[j];
+        const gap = gapTo(c, ah, tk);
+        if (gap > CAR_LEN * 2.2) break;          // sorted, so everything further is too
+        if (gap <= 0) continue;
+        if (Math.abs(ah.lane - c.lane) > CAR_WIDE) continue;
+        if (gap >= CAR_LEN) continue;
         const closing = c.v - ah.v;
         c.s -= (CAR_LEN - gap);
         if (c.s < 0) { c.s += tk.len; c.lap--; }
         c.v = Math.min(c.v, ah.v * 0.985);
-        /* a hard enough closing rate is contact, not a lift */
-        if (closing > 9 && c.spin <= 0 && ah.spin <= 0) {
+        if (pass === 0 && closing > 9 && c.spin <= 0 && ah.spin <= 0) {
           const hard = closing > 17;
           c.heat += hard ? 0.16 : 0.05;
           ah.heat += hard ? 0.12 : 0.035;
@@ -577,26 +625,30 @@ function resolveContact(dt) {
             if (ah.isP || c.isP) { banner("CONTACT!", 1.2); sfx("bad"); }
           }
         }
-        /* and they lean on each other looking for room */
         const push = (c.lane <= ah.lane ? -1 : 1) * 0.55 * dt;
         c.lane = clamp(c.lane + push, 0.03, 0.97);
         ah.lane = clamp(ah.lane - push * 0.5, 0.03, 0.97);
       }
     }
-  }
-  /* door to door: two cars cannot hold the same lane at the same point */
-  for (let i = 0; i < live.length; i++) {
-    for (let j = i + 1; j < live.length; j++) {
-      const a = live[i], b = live[j];
-      if (Math.abs(gapTo(a, b, tk)) > CAR_LEN * 0.8) continue;
-      const dl = b.lane - a.lane;
-      const need = CAR_WIDE * 1.05;
-      if (Math.abs(dl) >= need) continue;
-      const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.5;
-      a.lane = clamp(a.lane - shove, 0.03, 0.97);
-      b.lane = clamp(b.lane + shove, 0.03, 0.97);
-      a.v *= 0.998; b.v *= 0.998;
-      a.heat += 0.02 * dt; b.heat += 0.02 * dt;
+
+    /* door to door: two cars cannot hold the same lane at the same point.
+       The overlap window has to be a full car length — at eight tenths of
+       one, two cars a little over half a length apart were left merged. */
+    for (let i = 0; i < live.length; i++) {
+      for (let j = i + 1; j < live.length; j++) {
+        const a = live[i], b = live[j];
+        if (Math.abs(gapTo(a, b, tk)) >= CAR_LEN) continue;
+        const dl = b.lane - a.lane;
+        const need = CAR_WIDE * 1.05;
+        if (Math.abs(dl) >= need) continue;
+        const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.5;
+        a.lane = clamp(a.lane - shove, 0.03, 0.97);
+        b.lane = clamp(b.lane + shove, 0.03, 0.97);
+        if (pass === 0) {
+          a.v *= 0.998; b.v *= 0.998;
+          a.heat += 0.02 * dt; b.heat += 0.02 * dt;
+        }
+      }
     }
   }
 }
@@ -610,7 +662,7 @@ function onLeaderLap() {
     const top = R.field.filter(c => !c.dnf).sort((a, b) => (b.lap * R.tk.len + b.s) - (a.lap * R.tk.len + a.s)).slice(0, 3);
     top.forEach((c, i) => c.stagePts += (3 - i));
     banner("STAGE " + R.stage + " — points awarded", 2.2); sfx("yellow");
-    if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(4, 6); }
+    if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(4, 6); bunchField(); }
   }
   /* cautions */
   if (!R.yellow && R.leader.lap < track.laps - 1) {
@@ -622,12 +674,47 @@ function onLeaderLap() {
     if (Math.random() < base) throwCaution();
   }
 }
+/* ---------- the field bunches under yellow ----------
+   This is why a NASCAR race is never over until it is over, and it was
+   missing.  Without it a quicker car simply drove away and the finishing
+   order was settled by lap three: the only lever on the outcome was raw
+   pace, so the difficulty band had almost no working range — a shade too
+   low and the player won all ten club races, a shade too high and they
+   won none across a ten-year career.
+
+   Lead-lap cars close up behind the leader in the order they were running.
+   Cars already a lap down stay a lap down; nobody gets a lap back for
+   being slow. */
+function bunchField() {
+  const tk = R.tk;
+  const live = R.field.filter(c => !c.done && !c.dnf && c.pit <= 0);
+  if (live.length < 2) return;
+  live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
+  const leader = live[0];
+  const leadLap = leader.lap;
+  const leadTotal = leader.lap * tk.len + leader.s;
+  const SPACING = CAR_LEN * 1.9;
+  let rank = 0;
+  for (const c of live) {
+    if (c === leader) continue;
+    if (c.lap < leadLap) continue;                 // stays lapped
+    rank++;
+    const want = leadTotal - rank * SPACING;
+    const cur = c.lap * tk.len + c.s;
+    if (want <= cur) continue;                     // already closer than that
+    c.lap = Math.floor(want / tk.len);
+    c.s = want - c.lap * tk.len;
+    c.v = Math.min(c.v, 22);
+  }
+}
+
 /* A caution that is not somebody's wreck: debris, a cut tyre, a car
    stopped on the apron.  Wrecks now come out of the racing itself, so
    this only covers the rest. */
 function throwCaution() {
   R.yellow = 1; R.yellowT = rnd(5, 8); R.cautions++;
-  banner("CAUTION — YELLOW FLAG", 2.2);
+  bunchField();
+  banner("CAUTION — FIELD BUNCHES UP", 2.2);
   sfx("yellow");
 }
 function fireAura() {
@@ -783,7 +870,7 @@ function startSeason(sid) {
       team: teams.splice(ri(0, teams.length - 1), 1)[0],
       /* same gradient for a championship roster, so the title is fought
          between a handful of cars rather than the whole entry list */
-      rel: (1.06 - (i / Math.max(1, def.rivals - 1)) * 0.34) * rnd(0.97, 1.03), num, pts: 0,
+      rel: (1.02 - (i / Math.max(1, def.rivals - 1)) * 0.34) * rnd(0.97, 1.03), num, pts: 0,
     });
   }
   const drv = G.drivers[G.teams[G.curTeam].driver];
