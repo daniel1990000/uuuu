@@ -13,11 +13,25 @@ const TYRES = {
   medium: { n: "Medium", grip: 1.00, wear: 1.00, desc: "The safe choice." },
   hard:   { n: "Hard",   grip: 0.962, wear: 0.60, desc: "A shade slower, but they may save you a stop." },
 };
-const FUEL = {
-  light: { n: "Short fill", spd: 1.055, range: 0.60, desc: "Lighter and quicker — but you will stop again." },
-  full:  { n: "Full tank",  spd: 1.0,   range: 1.0,  desc: "Heavy early, but it goes the distance." },
+/* The short-fill option is gone.  It only ever won if the race rewarded a
+   sprint stint, and nothing here does, so it was a choice with a right
+   answer — which is not a choice.  Everyone starts full; what you do with
+   the fuel is the decision now, and that is what the modes are for. */
+
+/* ---------- driving modes ----------
+   The live decision, changeable any lap.  Each is genuinely better at
+   something and worse at something else, so there is no default answer. */
+const MODES = {
+  push:     { n: "Push",     ico: "\u25B2", pace: 1.045, wear: 1.55, fuel: 1.30, risk: 1.90,
+              desc: "Everything you have. Tyres and fuel go quickly and mistakes cost races." },
+  normal:   { n: "Normal",   ico: "\u25CF", pace: 1.000, wear: 1.00, fuel: 1.00, risk: 1.00,
+              desc: "Race pace. Nothing gained, nothing thrown away." },
+  conserve: { n: "Conserve", ico: "\u25BC", pace: 0.958, wear: 0.62, fuel: 0.72, risk: 0.45,
+              desc: "Short-shift and roll the corners. Saves a stop, costs track position." },
 };
-let STRAT = { tyre: "medium", fuel: "full", aura: "none" };
+const MODE_ORDER = ["push", "normal", "conserve"];
+
+let STRAT = { tyre: "medium", mode: "normal", aura: "none" };
 
 let R = null;          // live race
 let SEASON = null;     // live championship
@@ -34,7 +48,10 @@ function makeEntry(name, team, perf, col, num, opts) {
     pit: 0, stops: 0, pitMul: 1, fuelMul: 1, draftMul: 1, brake: 0,
     done: false, dnf: false, fin: 0, stagePts: 0, ledLaps: 0, best: 0,
     pace: 0, defend: 0, sbs: 0,
-    tyre: "medium", fuelPlan: "full", pitArmed: 0, pitKind: "both",
+    tyre: "medium", mode: "normal", pitArmed: 0, pitKind: "both",
+    /* crash state: heat is how close this car is to a mistake, spin is the
+       seconds it spends gathering one up, damage slows it for good */
+    heat: 0, spin: 0, damage: 0, wrecked: 0, nudge: 0,
   }, opts || {});
 }
 
@@ -45,14 +62,17 @@ function buildField(track, season) {
   const perf = carPerf(car, track.surf) + driverPerf(drv, track.surf);
   const field = [makeEntry(drv.name, "YOUR TEAM", perf, TEAMC[car.paint % 8], car.num, {
     isP: true, dur: car.dur, maxdur: cs.maxdur,
-    tyre: STRAT.tyre, fuelPlan: STRAT.fuel,
+    tyre: STRAT.tyre, mode: STRAT.mode || "normal",
     paintIdx: car.paint % 8, model: CHASSIS_MODEL[car.id] || "stock",
     pitMul: Math.max(0.45, 1 - cs.pit / 100 - shopTech() / 900),
     fuelMul: 1 + cs.fuel / 100, draftMul: 1 + cs.drv / 200,
     brake: cs.brake, anl: teamAnalysis(G.curTeam), adRate: cs.ad + teamAppeal(G.curTeam) * 0.4,
   })];
-  const n = season ? season.def.rivals : 5;
-  const cols = ["#2255cc", "#e9a11b", "#3fae4a", "#8a3fc2", "#12b0b0", "#d457a0", "#7a4c22", "#556270"];
+  /* Sixteen cars on track.  A six-car field never felt like a race: there
+     was no traffic to lap, no pack to get shuffled in, and a caution
+     bunched nobody up. */
+  const n = season ? season.def.rivals : 15;
+  const cols = TEAMC.slice();
   /* Rival strength tracks the player so racing stays competitive, but the
      tier still matters: club events stay winnable, the Cup stays hard. */
   const tierFloor = 24 + track.fee * 1.9;
@@ -68,19 +88,27 @@ function buildField(track, season) {
       str = scaled * season.rivals[i].rel * (1 + season.round * 0.008);
       name = season.rivals[i].name; team = season.rivals[i].team; num = season.rivals[i].num;
     } else {
-      str = scaled * rnd(0.90, 1.09);
+      /* A real grid is not fifteen equal cars.  Everyone used to sit within
+         a few percent of the player, which meant a sixteen-car field was
+         sixteen cars all capable of winning — and, more to the point, that
+         there was never anybody slow enough to lap.  Spreading it gives a
+         couple of genuine front-runners, a midfield, and backmarkers you
+         come up behind and have to deal with. */
+      str = scaled * (1.06 - (i / Math.max(1, n - 1)) * 0.34) * rnd(0.97, 1.03);
       name = pool.splice(ri(0, pool.length - 1), 1)[0] || "Privateer " + i;
       team = tpool.splice(ri(0, tpool.length - 1), 1)[0] || "Independent";
       do { num = ri(2, 99); } while (nums.includes(num));
     }
     nums.push(num);
-    const rc = cols[i % cols.length];
+    /* step through the palette by a stride co-prime with its length so
+       neighbours on the grid never share a colour */
+    const rc = cols[(i * 3 + 1) % cols.length];
     field.push(makeEntry(name, team, str, rc, num,
       { pitMul: rnd(0.85, 1.15), fuelMul: rnd(0.95, 1.1), draftMul: rnd(0.95, 1.08),
         /* rivals run a neutral plan: their difficulty already comes from the
            strength band, so letting them stack compound bonuses on top would
            just tax the player for a choice the AI never actually makes */
-        tyre: "medium", fuelPlan: "full",
+        tyre: "medium", mode: "normal",
         paintIdx: Math.max(0, TEAMC.indexOf(rc)),
         model: ["stock", "stock", "aero", "stock", "truck", "mod"][i % 6] }));
   }
@@ -125,6 +153,54 @@ function startRace(track, season, auraTier) {
   return R;
 }
 function banner(text, secs) { if (R) { R.msg = text; R.msgT = secs; } }
+
+/* ---------- the racing line ----------
+
+   The old engine gave every track one groove and held it for the whole
+   lap, which is why the field traced a ring: nobody ever used the width
+   of the road.  A real lap is out-in-out.  You run up by the wall down
+   the straight, turn in, take the apex as low as the car will go, and
+   let it drift back out on exit.
+
+   Curvature is what tells us which of those we are in.  What is under
+   the car says whether we are cornering; what is coming says whether to
+   start setting up; what we just left says we are still unwinding. */
+function racingLine(tk, d, lanes) {
+  const here = sampleTrack(tk, d).c;
+  const soon = curvatureAhead(tk, d, 85);
+  const past = curvatureAhead(tk, d - 85, 85);
+  const apex = lanes.lo + 0.06;              // as low as the car will go
+  const wall = lanes.hi - 0.08;              // up against the fence
+
+  if (here > 0.18) {
+    /* in the corner: the tighter it is, the more it is worth being at the
+       apex, and a gentle sweeper is barely worth leaving the middle for */
+    const t = clamp((here - 0.18) / 0.45, 0, 1);
+    return lanes.line + (apex - lanes.line) * t;
+  }
+  if (soon > 0.22) {
+    /* entry: swing out to open the corner up, more so the tighter it is */
+    const t = clamp((soon - 0.22) / 0.45, 0, 1);
+    return lanes.line + (wall - lanes.line) * t;
+  }
+  if (past > 0.22) {
+    /* exit: still unwinding, so let it run out toward the wall */
+    const t = clamp((past - 0.22) / 0.45, 0, 1);
+    return lanes.line + (wall - lanes.line) * t * 0.72;
+  }
+  return lanes.line;
+}
+
+/* How much speed a line costs.  Away from the groove the surface is
+   dirtier and the corner is longer, which is what makes the low line
+   worth having and an outside pass a real commitment. */
+function lineCost(tk, d, lane, lanes) {
+  const here = sampleTrack(tk, d).c;
+  if (here < 0.14) return 1;                 // on a straight, anywhere is fine
+  const ideal = racingLine(tk, d, lanes);
+  const off = Math.abs(lane - ideal);
+  return 1 - Math.min(0.055, off * 0.085) * clamp(here / 0.5, 0.4, 1.4);
+}
 
 /* How many lanes a surface supports, and where the groove sits. */
 function raceLanes(surf) {
@@ -212,17 +288,29 @@ function raceTick(dt) {
       }
       continue;
     }
+    /* a car gathering up a slide is a passenger until it is done */
+    if (c.spin > 0) {
+      c.spin -= dt;
+      c.v = Math.max(0, c.v - 26 * dt);
+      c.s += c.v * dt;
+      c.lane = clamp(c.lane + c.nudge * dt, 0.04, 0.96);
+      if (c.spin <= 0) c.nudge = 0;
+      continue;
+    }
+
     const sample = sampleTrack(tk, c.s);
     const curv = sample.c;
     const bank = sample.b;
+    const mode = MODES[c.mode] || MODES.normal;
 
     /* grip: tyres, corner tightness, banking helps, surface matters */
     const tset = TYRES[c.tyre] || TYRES.medium;
-    const fset = FUEL[c.fuelPlan] || FUEL.full;
     const grip = (0.80 + 0.20 * (c.tyreLife / 100)) * (1 + bank / 220) * tset.grip;
     /* cornering cost: tight corners scrub speed unless handling is high */
     const cornerCost = curv * (1.0 - Math.min(0.55, c.perf / 340));
-    let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42) * fset.spd;
+    let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42);
+    target *= mode.pace;
+    if (c.damage) target *= 1 - Math.min(0.28, c.damage / 100);
     if (c.brake) target *= 1 + Math.min(0.05, c.brake / 400) * curv;
 
     /* drafting — real on the big ovals, mild on intermediates */
@@ -245,36 +333,35 @@ function raceTick(dt) {
         if (gap > 16) target = Math.min(target * 1.7, 30);
       }
     }
-    const accel = 8 + c.perf * 0.05;
-    c.v += clamp(target - c.v, -accel * dt * 2.4, accel * dt);
 
-    /* ---- racecraft: pick a lane, defend, and pass ---- */
+    /* ---- racecraft ----
+       Everyone aims at the racing line for where they are on the lap.
+       Passing means deliberately leaving it, which costs grip — so a move
+       has to be worth it rather than free. */
     const lanes = raceLanes(track.surf);
-    let want = c.lane;
+    const line = racingLine(tk, c.s, lanes);
+    let want = line;
     if (R.yellow) {
-      want = 0.42;                                   // single file behind the pace car
+      want = lanes.line;                              // single file behind the pace car
     } else {
       const ahead = carAhead(c, tk);
-      if (ahead && ahead.gap < 26 && c.pace > ahead.car.pace * 1.004) {
-        /* faster than the car in front — look for a way by */
-        const out = clamp(c.lane + 0.30, lanes.lo, lanes.hi);
-        const ins = clamp(c.lane - 0.30, lanes.lo, lanes.hi);
+      if (ahead && ahead.gap < 26 && c.pace > ahead.car.pace * 1.002) {
+        /* quicker than the car in front: try the high side or the low side,
+           whichever is actually open */
+        const out = clamp(line + 0.26, lanes.lo, lanes.hi);
+        const ins = clamp(line - 0.26, lanes.lo, lanes.hi);
         const outFree = laneFree(c, out, tk), insFree = laneFree(c, ins, tk);
-        /* momentum outside on the big tracks, dive inside on the short ones */
         const preferOut = track.surf === "ss" || track.surf === "mid";
         want = preferOut ? (outFree ? out : (insFree ? ins : c.lane))
                          : (insFree ? ins : (outFree ? out : c.lane));
         if (!outFree && !insFree) target *= 0.985;    // stuck in traffic
       } else if (ahead && ahead.gap < 9) {
         target *= 0.99;                               // dirty air right behind
-      } else {
-        /* no traffic: settle back onto the groove */
-        want = c.defend > 0 ? c.lane : lanes.line;
       }
-      /* a leader defends the preferred line when someone is close behind */
+      /* a leader defends by taking the line away rather than by magic */
       const beh = carBehind(c, tk);
       c.defend = (beh && beh.gap < 12 && beh.car.pace > c.pace) ? 1 : 0;
-      if (c.defend) want = lanes.line;
+      if (c.defend && !ahead) want = line;
     }
     /* never steer into a car alongside */
     const side = alongside(c, tk);
@@ -287,7 +374,42 @@ function raceTick(dt) {
     const rate = (track.surf === "road" ? 0.75 : track.surf === "street" ? 0.85 : 0.55) * dt;
     c.lane += clamp(want - c.lane, -rate, rate);
     c.lane = clamp(c.lane, lanes.lo, lanes.hi);
+
+    /* running off the groove is slower, which is what makes a pass a
+       commitment instead of a free lane change */
+    target *= lineCost(tk, c.s, c.lane, lanes);
     c.pace = target;
+
+    const accel = 8 + c.perf * 0.05;
+    c.v += clamp(target - c.v, -accel * dt * 2.4, accel * dt);
+
+    /* ---- how close this car is to losing it ----
+       Heat builds from the things that actually bite in a stock car: a
+       worn set, running hard, running beside someone, and the corner
+       loading the car up.  Skill bleeds it back off. */
+    if (!R.yellow) {
+      const worn = clamp((45 - c.tyreLife) / 45, 0, 1);
+      const load = 0.35 + curv * 1.5;
+      /* Tuned against a 30-lap short track, which is about five minutes of
+         running.  A car on fresh rubber builds less heat than it sheds and
+         never makes a mistake at all; a car on a worn set in Normal reaches
+         one about every hundred seconds; Push gets there roughly three
+         times as often, and Conserve almost never does.
+
+         The decay is deliberately small.  When it sat close to the build
+         rate the whole thing became a threshold: Normal produced 0.06
+         wrecks a race and Push produced 3.28, a fifty-five-fold jump off a
+         2.3x risk figure, because the multiplier was fighting the decay
+         rather than setting the pace.  With decay near zero the time to a
+         mistake is roughly one over the build, so the risk number in the
+         mode table means what it says. */
+      let build = (0.0026 + worn * 0.0500) * load * mode.risk;
+      if (c.sbs) build *= 1.5;
+      if (c.damage) build *= 1 + c.damage / 90;
+      build *= clamp(1.5 - c.perf / 150, 0.55, 1.5);      // better cars are calmer
+      c.heat = Math.max(0, c.heat + (build - 0.0008) * dt);
+      if (c.heat > 1) { c.heat = 0; carMistake(c, tk, curv); }
+    } else c.heat = Math.max(0, c.heat - dt * 0.6);
 
     c.s += c.v * dt;
 
@@ -295,8 +417,10 @@ function raceTick(dt) {
     if (c.s >= tk.len) {
       c.s -= tk.len; c.lap++;
       if (c === R.leader) onLeaderLap();
-      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2) * tset.wear;
-      const wearF = 100 / (track.laps * 0.80 * c.fuelMul * fset.range);
+      const md = MODES[c.mode] || MODES.normal;
+      const wearT = (100 / (track.laps * 0.55)) * (1 + curvatureAhead(tk, 0, tk.len) * 1.2) *
+        tset.wear * md.wear;
+      const wearF = (100 / (track.laps * 0.80 * c.fuelMul)) * md.fuel;
       c.tyreLife = Math.max(0, c.tyreLife - wearT * rnd(0.85, 1.15) * 0.55);
       c.fuel = Math.max(0, c.fuel - wearF);
       if (c.isP) {
@@ -307,8 +431,11 @@ function raceTick(dt) {
         R.rp += 1 + (c.anl || 10) / 26;
         R.ad += (c.adRate || 10) / 14;
         if (c.dur <= 0 && !c.dnf) { c.dnf = true; banner("ENGINE LET GO — DNF", 3); sfx("bad"); }
-      } else if (Math.random() < 0.0035 && c.lap > 3) {
-        c.dnf = true;                                  // rivals break too
+      } else if (Math.random() < 0.0012 && c.lap > 3) {
+        /* Rivals break too, but this used to be the leading cause of
+           retirement — nearly two a race, which is more than the wrecks.
+           Mechanical trouble should be the rarer story. */
+        c.dnf = true;
       }
       /* pit decision at the line — yours is a call you make, theirs is not */
       const lapsLeft = track.laps - c.lap;
@@ -339,12 +466,139 @@ function raceTick(dt) {
     if (c === R.leader) c.ledLaps += dt;
   }
 
+  /* the road is solid: nobody drives through anybody */
+  resolveContact(dt);
+
   /* classify anyone still out 12s after the winner */
   if (R.finish.length && R.t - R.winT > 12) {
     running.filter(c => !c.done).sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s))
       .forEach(c => { c.done = true; c.fin = R.finish.length + 1; R.finish.push(c); });
   }
   if (R.field.every(c => c.done || c.dnf)) endRace();
+}
+
+/* ---------- a car loses it ----------
+   Not every mistake is a wreck.  Most are a twitch the driver catches;
+   some cost a couple of seconds; the bad ones end in the fence and take
+   whoever was close enough with them. */
+function carMistake(c, tk, curv) {
+  /* Most moments are caught — that is what makes the ones that are not
+     worth watching.  A better driver in a better car catches more of them,
+     but nobody catches all of them. */
+  const skill = clamp(c.perf / 130, 0.35, 1.25);
+  const save = clamp(0.62 + skill * 0.22, 0.55, 0.90);
+  const slide = save + (1 - save) * 0.72;
+  const r = Math.random();
+  if (r < save) {                          // gathered it up
+    c.v *= 0.96;
+    if (c.isP) banner("YOU GATHER IT UP", 1.1);
+    return;
+  }
+  if (r < slide) {                         // a slide, a couple of seconds
+    c.spin = rnd(0.5, 1.1);
+    c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.15, 0.4);
+    c.v *= 0.62;
+    if (c.isP) { banner("LOOSE! YOU LOSE GROUND", 1.6); sfx("bad"); }
+    return;
+  }
+  wreck(c, tk, curv, Math.random() < 0.28);
+}
+
+/* Into the fence.  A heavy one collects the cars running close behind,
+   which is where the multi-car pile comes from — not from a dice roll on
+   the track type. */
+function wreck(lead, tk, curv, heavy) {
+  const collected = [lead];
+  if (heavy) {
+    for (const o of R.field) {
+      if (o === lead || o.done || o.dnf || o.pit > 0 || o.spin > 0) continue;
+      const g = -gapTo(lead, o, tk);
+      /* behind the incident and close enough to have nowhere to go */
+      if (g > 0 && g < 34 && Math.abs(o.lane - lead.lane) < 0.42 &&
+          Math.random() < 0.55) collected.push(o);
+    }
+  }
+  for (const c of collected) {
+    c.spin = rnd(1.1, 2.2);
+    c.nudge = (Math.random() < 0.5 ? -1 : 1) * rnd(0.3, 0.7);
+    c.v *= 0.25;
+    const hit = ri(heavy ? 18 : 8, heavy ? 46 : 24);
+    c.damage = Math.min(100, c.damage + hit);
+    c.wrecked = 1;
+    if (c.isP) c.dur = Math.max(0, c.dur - hit);
+    /* a hard enough hit is the end of the day */
+    if (c.damage >= 82 || (heavy && Math.random() < 0.30)) {
+      c.dnf = true; c.done = false;
+      if (c.isP) { banner("YOU'RE OUT — TOO MUCH DAMAGE", 3); sfx("bad"); }
+    }
+  }
+  const me = collected.find(c => c.isP);
+  if (me) { if (!me.dnf) sfx("bad"); banner(heavy ? "YOU'RE COLLECTED!" : "YOU'RE IN THE FENCE!", 2.4); }
+  else banner(collected.length > 2 ? "BIG WRECK — " + collected.length + " CARS"
+                                   : "CAUTION — CAR IN THE FENCE", 2.4);
+  if (!R.yellow) { R.yellow = 1; R.yellowT = rnd(6, 10); R.cautions++; sfx("yellow"); }
+}
+
+/* ---------- separation ----------
+   Cars used to pass straight through each other: being alongside only
+   scrubbed a little speed, and nothing ever stopped two of them holding
+   the same piece of road.  This runs after everyone has moved and makes
+   the road solid — a car cannot be driven into the back of the one in
+   front, and two side by side push each other apart rather than merge. */
+const CAR_LEN = 7.0;                 // world units, nose to tail plus a gap
+const CAR_WIDE = 0.17;               // lane units, door to door
+
+function resolveContact(dt) {
+  const tk = R.tk;
+  const live = R.field.filter(c => !c.done && !c.dnf && c.pit <= 0);
+  /* front to back, so each car only has to look at the one it is chasing */
+  live.sort((a, b) => (b.lap * tk.len + b.s) - (a.lap * tk.len + a.s));
+  for (let i = 1; i < live.length; i++) {
+    const c = live[i];
+    for (let j = i - 1; j >= 0 && j >= i - 4; j--) {
+      const ah = live[j];
+      const gap = gapTo(c, ah, tk);
+      if (gap <= 0 || gap > CAR_LEN * 2) continue;
+      const dl = Math.abs(ah.lane - c.lane);
+      if (dl > CAR_WIDE) continue;                 // clear of each other sideways
+      if (gap < CAR_LEN) {
+        /* nowhere to go: hold station behind and lose the closing speed */
+        const closing = c.v - ah.v;
+        c.s -= (CAR_LEN - gap);
+        if (c.s < 0) { c.s += tk.len; c.lap--; }
+        c.v = Math.min(c.v, ah.v * 0.985);
+        /* a hard enough closing rate is contact, not a lift */
+        if (closing > 9 && c.spin <= 0 && ah.spin <= 0) {
+          const hard = closing > 17;
+          c.heat += hard ? 0.16 : 0.05;
+          ah.heat += hard ? 0.12 : 0.035;
+          if (hard) {
+            ah.v *= 0.93;
+            if (ah.isP || c.isP) { banner("CONTACT!", 1.2); sfx("bad"); }
+          }
+        }
+        /* and they lean on each other looking for room */
+        const push = (c.lane <= ah.lane ? -1 : 1) * 0.55 * dt;
+        c.lane = clamp(c.lane + push, 0.03, 0.97);
+        ah.lane = clamp(ah.lane - push * 0.5, 0.03, 0.97);
+      }
+    }
+  }
+  /* door to door: two cars cannot hold the same lane at the same point */
+  for (let i = 0; i < live.length; i++) {
+    for (let j = i + 1; j < live.length; j++) {
+      const a = live[i], b = live[j];
+      if (Math.abs(gapTo(a, b, tk)) > CAR_LEN * 0.8) continue;
+      const dl = b.lane - a.lane;
+      const need = CAR_WIDE * 1.05;
+      if (Math.abs(dl) >= need) continue;
+      const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.5;
+      a.lane = clamp(a.lane - shove, 0.03, 0.97);
+      b.lane = clamp(b.lane + shove, 0.03, 0.97);
+      a.v *= 0.998; b.v *= 0.998;
+      a.heat += 0.02 * dt; b.heat += 0.02 * dt;
+    }
+  }
 }
 
 function onLeaderLap() {
@@ -362,26 +616,19 @@ function onLeaderLap() {
   if (!R.yellow && R.leader.lap < track.laps - 1) {
     /* Concrete on both sides and no run-off: a mistake on a street course
        is a caution far more often than the same mistake on a road course. */
-    const base = { short: 0.045, mid: 0.028, ss: 0.042, road: 0.018, street: 0.052 }[track.surf];
+    /* Lower than it was on purpose: most yellows now come out of a car
+       actually losing it, so this is only debris and mechanical trouble. */
+    const base = { short: 0.014, mid: 0.010, ss: 0.013, road: 0.006, street: 0.016 }[track.surf];
     if (Math.random() < base) throwCaution();
   }
 }
+/* A caution that is not somebody's wreck: debris, a cut tyre, a car
+   stopped on the apron.  Wrecks now come out of the racing itself, so
+   this only covers the rest. */
 function throwCaution() {
   R.yellow = 1; R.yellowT = rnd(5, 8); R.cautions++;
-  const big = R.track.surf === "ss" && Math.random() < 0.32;
-  banner(big ? "THE BIG ONE! CAUTION" : "CAUTION — YELLOW FLAG", 2.4);
+  banner("CAUTION — YELLOW FLAG", 2.2);
   sfx("yellow");
-  if (big) {
-    for (const c of R.field) {
-      if (c.done || c.dnf) continue;
-      if (!c.isP && Math.random() < 0.42) { c.v *= 0.25; c.s -= rnd(15, 45); }
-    }
-    const me = R.field[0];
-    if (!me.done && !me.dnf && Math.random() < 0.35) {
-      me.v *= 0.35; me.dur = Math.max(1, me.dur - ri(6, 14));
-      banner("YOU'RE COLLECTED IN THE WRECK!", 2.6);
-    }
-  }
 }
 function fireAura() {
   if (!R || !R.auraTier || R.auraLeft <= 0 || R.phase !== "green") return;
@@ -432,13 +679,32 @@ function showResults() {
   const track = R.track, me = R.field[0], season = R.season;
   const t = G.teams[G.curTeam];
   const car = G.cars[t.car], drv = G.drivers[t.driver];
-  const pos = me.fin || R.finish.length;
+  /* A retirement before anyone was classified leaves both of these at
+     zero, and a zero position indexes the purse at -1, which is undefined.
+     That was added straight onto the bank: money went NaN and stayed NaN
+     for the rest of the career, including in the save.  Never below last. */
+  const pos = clamp(me.fin || R.finish.length || R.field.length, 1, R.field.length);
 
   car.dur = Math.max(0, me.dur);
   drv.energy = clamp(drv.energy - 20, 0, 100);
 
   const purse = season ? season.def.purse : track.prize;
-  let prize = pos <= 6 ? purse[pos - 1] : 0;
+  /* The purse is six deep and the field is sixteen, so ten finishers used
+     to be paid nothing at all — which made a quiet mid-pack day cost more
+     than not entering.  Everyone who takes the start and runs it out gets
+     something.  A real purse does not cliff after sixth either; it slopes.
+     Tapering harder than this stalled the garage at level two across a
+     ten-year career, because tripling the field size tripled how often you
+     finish outside the top six. */
+  let prize;
+  if (pos <= purse.length) prize = purse[pos - 1];
+  else {
+    const tail = purse[purse.length - 1];
+    const k = (pos - purse.length) / Math.max(1, 16 - purse.length);
+    prize = Math.round(tail * (1.00 - 0.55 * clamp(k, 0, 1)));
+  }
+  /* and nothing that is not a real number ever reaches the bank */
+  if (!Number.isFinite(prize)) prize = 0;
   G.money += prize; G.stats.earned += prize;
 
   let fans = Math.round(track.fans * (pos === 1 ? 1.6 : pos <= 3 ? 1.05 : pos <= 6 ? 0.6 : 0.28));
@@ -515,7 +781,9 @@ function startSeason(sid) {
     rivals.push({
       name: drivers.splice(ri(0, drivers.length - 1), 1)[0],
       team: teams.splice(ri(0, teams.length - 1), 1)[0],
-      rel: rnd(0.90, 1.10), num, pts: 0,
+      /* same gradient for a championship roster, so the title is fought
+         between a handful of cars rather than the whole entry list */
+      rel: (1.06 - (i / Math.max(1, def.rivals - 1)) * 0.34) * rnd(0.97, 1.03), num, pts: 0,
     });
   }
   const drv = G.drivers[G.teams[G.curTeam].driver];

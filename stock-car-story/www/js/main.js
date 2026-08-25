@@ -91,6 +91,14 @@ function loop(ts) {
 
 function updateRaceHud() {
   const me = R.field[0];
+  const mb = $("modeBtn");
+  if (mb) {
+    const md = MODES[me.mode] || MODES.normal;
+    mb.firstChild.nodeValue = md.ico;
+    mb.querySelector("span").textContent = md.n.toLowerCase();
+    mb.classList.toggle("push", me.mode === "push");
+    mb.classList.toggle("conserve", me.mode === "conserve");
+  }
   const pos = playerPos();
   $("posBadge").textContent = "P" + pos;
   $("lapBox").innerHTML = "LAP " + Math.min(me.lap + 1, R.laps) + "/" + R.laps +
@@ -202,6 +210,7 @@ function boot() {
   $("speedBtn").onclick = cycleSpeed;
   $("raceSpeedBtn").onclick = cycleSpeed;
   $("auraBtn").onclick = fireAura;
+  $("modeBtn").onclick = cycleMode;
   $("pitBtn").onclick = () => {
     if (!R || R.phase !== "green") return;
     sfx("click");

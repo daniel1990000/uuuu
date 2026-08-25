@@ -134,12 +134,18 @@ function scrHelp() {
     "tap its button. The <b class='b'>tabs</b> along the bottom are your five screens. " +
     "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap it to go 1×, 2×, 3× or pause. " +
     "You can also tap the car, the crew, the banner or the bench in the shop.</div>" +
-    "<h4>Race day</h4><div class='small'>Pick <b>tyres</b> (grip against wear) and <b>fuel</b> " +
-    "(weight against range) before the flag. During the race the <b class='b'>PIT</b> button calls your stop — " +
-    "tyres, fuel or both. A partial stop is quicker, and stopping under caution costs about half the time. " +
-    "The <b class='b'>1×</b> button next to it runs the race faster — the simulation still resolves every " +
-    "overtake and every bump exactly as it does at normal speed, so nothing is skipped. " +
-    "If you never call one, the crew will bring you in before the tyres are gone.</div>" +
+    "<h4>Race day</h4><div class='small'>Pick your <b>tyres</b> (grip against wear) before the flag. " +
+    "During the race the <b class='b'>PIT</b> button calls your stop — tyres, fuel or both. A partial " +
+    "stop is quicker, and stopping under caution costs about half the time. If you never call one, the " +
+    "crew will bring you in before the tyres are gone.</div>" +
+    "<h4>Driving modes</h4><div class='small'>The button beside PIT switches between " +
+    "<b>\u25B2 Push</b>, <b>\u25CF Normal</b> and <b>\u25BC Conserve</b>, any lap you like. Push is real " +
+    "lap time, but it eats tyres and fuel and it is how you end up in the fence. Conserve gives track " +
+    "position back and can save you a whole stop. Nothing is free.</div>" +
+    "<h4>Wrecks</h4><div class='small'>Worn tyres, running hard, running beside someone and the load a " +
+    "corner puts through the car all build toward a mistake. Most get caught. Some are a slide worth a " +
+    "couple of seconds. The bad ones are the fence — and a heavy one collects whoever was close behind, " +
+    "which is where a big wreck comes from. Damage stays with you for the rest of the race.</div>" +
     "<h4>Auras</h4><div class='small'>One-shot boosts earned from first podiums, titles and driver levels. " +
     "Spend them on a race, a build, a part fitting, an upgrade or a training session — " +
     "the upgrade is usually the best value because it is permanent.</div>" +
@@ -689,8 +695,10 @@ function scrStrategy(tr, season, fee) {
 
   h += "<h4>Tyres</h4>" + segBar(Object.keys(TYRES).map(k => [k, TYRES[k].n]), STRAT.tyre, "setTyre");
   h += "<div class='small dim'>" + TYRES[STRAT.tyre].desc + "</div>";
-  h += "<h4>Fuel</h4>" + segBar(Object.keys(FUEL).map(k => [k, FUEL[k].n]), STRAT.fuel, "setFuel");
-  h += "<div class='small dim'>" + FUEL[STRAT.fuel].desc + "</div>";
+  h += "<h4>Starting mode</h4>" +
+    segBar(MODE_ORDER.map(k => [k, MODES[k].ico + " " + MODES[k].n]), STRAT.mode, "setMode");
+  h += "<div class='small dim'>" + MODES[STRAT.mode].desc +
+    " You can change this any time during the race.</div>";
 
   /* aura is part of the same decision, not a second button */
   if (anyAura()) {
@@ -719,7 +727,19 @@ function scrStrategy(tr, season, fee) {
 }
 function setAura(k) { STRAT.aura = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
 function setTyre(k) { STRAT.tyre = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
-function setFuel(k) { STRAT.fuel = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
+function setMode(k) { STRAT.mode = k; scrStrategy(SCR_TR, SCR_SE, SCR_FEE); }
+/* Change the mode mid-race from the HUD. */
+function cycleMode() {
+  if (!R || R.phase !== "green") return;
+  const me = R.field[0];
+  if (me.done || me.dnf) return;
+  const i = MODE_ORDER.indexOf(me.mode);
+  me.mode = MODE_ORDER[(i + 1) % MODE_ORDER.length];
+  STRAT.mode = me.mode;
+  sfx("click");
+  banner(MODES[me.mode].n.toUpperCase(), 1.1);
+  updateRaceHud();
+}
 let SCR_TR = null, SCR_SE = null, SCR_FEE = 0;
 
 /* ============================================================

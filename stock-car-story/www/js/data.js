@@ -270,17 +270,19 @@ const TRACKS = [
 
 /* ---------- SERIES ---------- */
 const SERIES = [
- {id:"rookie", n:"Rookie Cup",     tier:1, fee:30,  rivals:5,  str:[34,56],
+ {id:"rookie", n:"Rookie Cup",     tier:1, fee:30,  rivals:15,  str:[34,56],
   tracks:["pineridge","clayton","thunderbowl","boardwalk"],
   purse:[500,250,150,90,60,40],   fans:600,  req:{garage:1}},
- {id:"national",n:"National Series",tier:2, fee:80,  rivals:6,  str:[62,92],
+ {id:"national",n:"National Series",tier:2, fee:80,  rivals:15,  str:[62,92],
   tracks:["boardwalk","maplecity","granite","peachstate","hogback","saltflats"],
   purse:[1000,500,300,180,120,80],fans:1400, req:{garage:2}},
- {id:"cup",    n:"Premier Cup",    tier:3, fee:160, rivals:7,  str:[100,142],
+ {id:"cup",    n:"Premier Cup",    tier:3, fee:160, rivals:15,  str:[100,142],
   tracks:["maplecity","gateway","bigbeach","hogback","pocahontas","yellowhammer","granite","victorylane"],
   purse:[2000,1000,600,360,240,160],fans:3000,req:{garage:3}, playoff:true},
 ];
-const PTS = [40,35,34,33,32,31,30,29,28,27,26,25];
+/* Sixteen deep now that fields are sixteen cars — the tail used to fall
+   off the end of the table and everyone below twelfth scored the same. */
+const PTS = [40,35,34,33,32,31,30,29,28,27,26,25,24,23,22,21];
 
 /* ---------- GARAGE LEVELS ---------- */
 const GARAGES = [null,
@@ -300,10 +302,13 @@ const AURA_ORDER = ["blue","pink","silver","gold"];
 /* ---------- RIVALS ---------- */
 const RIVAL_TEAMS = ["Haybale Racing","Two-Lane Motorsports","Coyote Speed Co.","Ironhead Garage",
  "Blue Ridge Racers","Cactus Crown","Steel City Stockers","Gulf Coast Gears","Prairie Fire Racing",
- "Night Owl Racing","Copperhead Crew","Lone Star Livery","Dust Devil Racing","Piedmont Bros."];
+ "Night Owl Racing","Copperhead Crew","Lone Star Livery","Dust Devil Racing","Piedmont Bros.",
+ "Redclay Racing","Salt Lick Speed","Hollerhead Motors","Big Timber Racing","Switchback Squad",
+ "Tin Roof Racing","Mudflap Motorsport"];
 const RIVAL_DRIVERS = ["Buck Diesel","Sally Slide","Tex Turner","Moose Malone","Reba Rev","Chip Chassis",
  "Duke Dragline","Patty Pushrod","Slim Slick","Ace Alternator","Jolene Jets","Big Earl","Cooter Camber",
- "Wanda Wideopen","Bubba Banks","Rico Radial"];
+ "Wanda Wideopen","Bubba Banks","Rico Radial","Gus Gasket","Marla Manifold","Hank Halfshaft",
+ "Dot Driveshaft","Curtis Camshaft","Nell Nitro","Roy Rollcage"];
 
 /* ---------- EVENTS (flavor) ---------- */
 const EVENTS = [

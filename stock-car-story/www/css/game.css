@@ -233,6 +233,17 @@ table.t tr.me{background:#fff6ce}
 #order .o i{width:9px;height:9px;border-radius:2px;border:1px solid #000;font-style:normal}
 #order .o span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* Driving mode, coloured by what it costs you: red is pace at the price
+   of tyres and a wall, blue is the other way round. */
+#modeBtn{pointer-events:auto;background:linear-gradient(#dfe7f5,#9fb0cc);
+  border:3px solid #000;border-radius:10px;color:#12203a;font-family:inherit;
+  font-size:12px;padding:8px 8px 6px;min-width:58px;box-shadow:0 3px 0 #0a1130;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
+#modeBtn span{font-size:6px;opacity:.85;letter-spacing:.3px}
+#modeBtn.push{background:linear-gradient(#ffb0a6,#e8574a);color:#3d0b06}
+#modeBtn.conserve{background:linear-gradient(#a9e8f5,#4fa8c8);color:#052733}
+#modeBtn:active{transform:translateY(3px);box-shadow:none}
+
 #pitBtn{pointer-events:auto;background:linear-gradient(#cfe4ff,#7fa8dd);
   border:3px solid #000;border-radius:11px;color:#0d2340;font-family:inherit;
   font-size:10px;padding:11px 12px;box-shadow:0 3px 0 #2b4c7a;cursor:pointer;
