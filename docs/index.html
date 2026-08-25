@@ -1231,23 +1231,9 @@ function advanceWeek() {
   }
   for (const c of G.crew) if (Math.random() < 0.13) { const k = pick(["ap", "tc", "an"]); c[k] += 1; }
 
-  if (G.build) {
-    G.build.wks--;
-    if (G.build.wks <= 0) {
-      const car = buildCarInstance(G.build.carId, G.build.quality);
-      if (G.build.slot < G.cars.length) G.cars[G.build.slot] = car; else G.cars.push(car);
-      toast("Machine complete!<br><span class='b'>" + esc(car.name) + "</span> — build quality " + Math.round(G.build.quality * 100) + "%");
-      sfx("ok"); G.build = null;
-    }
-  }
-  if (G.repair) {
-    G.repair.wks--;
-    if (G.repair.wks <= 0) {
-      const car = G.cars[G.repair.slot];
-      if (car) car.dur = carStats(car).maxdur;
-      toast("Repairs finished."); G.repair = null;
-    }
-  }
+  /* a safety net for any save that still carries outstanding shop work */
+  if (G.build) finishBuildNow();
+  if (G.repair) finishRepairNow();
   /* merchandising trickle */
   G.money += Math.floor(G.fans / 2500);
   /* random events */
@@ -1427,9 +1413,8 @@ function startBuild(carId, slot, auraTier) {
   let q = 1 + Math.min(0.45, shopTech() / 420) + rnd(0, 0.06);
   if (auraTier) { const a = spendAura(auraTier); if (a) q += 0.06 * a.mult; }
   q = Math.min(1.6, q);
-  const wks = Math.max(2, Math.round(5 - shopTech() / 160));
-  G.build = { carId, slot, quality: q, wks };
-  toast("Build started: <span class='b'>" + esc(def.name) + "</span><br>" + wks + " weeks");
+  G.build = { carId, slot, quality: q, wks: 0 };
+  finishBuildNow();
 }
 function installPart(car, partId, auraTier) {
   const s = carStats(car);
@@ -1454,14 +1439,39 @@ function repairCost(car) {
   if (G.sponsors.some(x => x.id === "piggy" && x.filled)) c = Math.round(c / 2);
   return c;
 }
+/* Shop work finishes when you pay for it.
+
+   Builds and repairs were measured in weeks, and weeks only passed while
+   the shop clock ticked.  Removing that clock left them waiting on
+   something that never happens: the objective card said "let the clock
+   run" next to a Wait button that did nothing, and a damaged machine could
+   not be repaired and could not race — a dead end with no way out of it.
+
+   A race is a month, so the shop has a month to do the work regardless.
+   You pay, it is done. */
+function finishBuildNow() {
+  if (!G.build) return;
+  const car = buildCarInstance(G.build.carId, G.build.quality);
+  if (G.build.slot < G.cars.length) G.cars[G.build.slot] = car; else G.cars.push(car);
+  toast("Machine ready!<br><span class='b'>" + esc(car.name) + "</span> \u2014 build quality " +
+    Math.round(G.build.quality * 100) + "%");
+  sfx("ok"); G.build = null;
+}
+function finishRepairNow() {
+  if (!G.repair) return;
+  const car = G.cars[G.repair.slot];
+  if (car) car.dur = carStats(car).maxdur;
+  toast("The machine is repaired."); sfx("ok"); G.repair = null;
+}
+
 function startRepair(slot) {
   const car = G.cars[slot]; if (!car) return;
   const cost = repairCost(car);
   if (G.repair) return toast("The crew is already repairing.");
   if (G.money < cost) return toast("Not enough money.");
   G.money -= cost;
-  G.repair = { slot, wks: Math.max(1, Math.round(2 - shopTech() / 200)) };
-  toast("Repairing — " + G.repair.wks + " week(s), " + fmtK(cost));
+  G.repair = { slot, wks: 0 };
+  finishRepairNow();
 }
 /* Is the next garage unlocked yet?
 
@@ -1643,7 +1653,7 @@ function makeEntry(name, team, perf, col, num, opts) {
     tyre: "medium", mode: "normal", pitArmed: 0, pitKind: "both",
     /* crash state: heat is how close this car is to a mistake, spin is the
        seconds it spends gathering one up, damage slows it for good */
-    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0,
+    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0, blown: 0,
   }, opts || {});
 }
 
@@ -1945,6 +1955,37 @@ function raceTick(dt) {
       if (c.spin <= 0) { c.nudge = 0; c.spinRate = 0; c.spinAng = 0; }
       continue;
     }
+    /* ---- mechanical failure ----
+       This used to be tested only as a car crossed the start line, so every
+       engine in the game let go at exactly the same three metres of road and
+       nowhere else.  It is a per-second risk now, checked wherever the car
+       happens to be, and it does not simply delete the car: it lets go, you
+       see and hear it, and the car slows and drags itself out of the way. */
+    if (!c.blown && !R.yellow && c.lap > 0) {
+      const worn = c.isP ? 1 - clamp(c.dur / Math.max(1, c.maxdur), 0, 1) : 0;
+      const md = MODES[c.mode] || MODES.normal;
+      /* Per second, not per tick.  The first cut multiplied by dt AND by 60,
+         which made it a per-tick probability sixty times too large: over
+         twenty-six races the entire field let go, 412 engines in all.  A
+         Measured over twenty-four races rather than reasoned about: a fresh
+         machine should let go in well under one race in ten, and one run
+         into the ground in roughly a third. The first numbers put a healthy
+         car at one in eight, which punishes you for nothing you did. */
+      const rate = (c.isP ? 0.00011 + worn * 0.00085 : 0.00010) * (md.risk > 1 ? 1.5 : 1);
+      if (Math.random() < rate * dt) blowUp(c, tk);
+    }
+    if (c.blown) {
+      c.v = Math.max(0, c.v - 14 * dt);
+      c.lane += clamp(0.6 - c.lane, -0.5 * dt, 0.5 * dt);   // limp to the apron
+      if (typeof fxTrail === "function" && Math.random() < 0.6) {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);
+      }
+      if (c.v < 1.5 && !c.dnf) { c.dnf = true; }
+      c.s += c.v * dt;
+      continue;
+    }
+
     /* a hurt car trails smoke for the rest of the day */
     if (c.damage > 24 && Math.random() < c.damage / 900) {
       if (typeof fxTrail === "function") {
@@ -2110,12 +2151,6 @@ function raceTick(dt) {
            thing to understand. */
         R.rp += 2.2 + (c.anl || 10) / 16;
         R.ad += (c.adRate || 10) / 14;
-        if (c.dur <= 0 && !c.dnf) { c.dnf = true; banner("ENGINE LET GO — DNF", 3); sfx("bad"); }
-      } else if (Math.random() < 0.0012 && c.lap > 3) {
-        /* Rivals break too, but this used to be the leading cause of
-           retirement — nearly two a race, which is more than the wrecks.
-           Mechanical trouble should be the rarer story. */
-        c.dnf = true;
       }
       /* pit decision at the line — yours is a call you make, theirs is not */
       const lapsLeft = track.laps - c.lap;
@@ -2160,6 +2195,21 @@ function raceTick(dt) {
    Not every mistake is a wreck.  Most are a twitch the driver catches;
    some cost a couple of seconds; the bad ones end in the fence and take
    whoever was close enough with them. */
+/* An engine lets go: smoke, a bang, and a car that is done for the day. */
+function blowUp(c, tk) {
+  c.blown = 1;
+  const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+  if (typeof fxBurst === "function") {
+    fxBurst("smoke", wp.x, wp.y, 16);
+    fxBurst("spark", wp.x, wp.y, 8);
+  }
+  sfx("crash");
+  if (c.isP) {
+    if (typeof fxShake === "function") fxShake(4);
+    banner("ENGINE LETS GO \u2014 YOUR RACE IS RUN", 3);
+  } else banner("#" + c.num + " IS SMOKING", 1.8);
+}
+
 function carMistake(c, tk, curv) {
   /* Most moments are caught — that is what makes the ones that are not
      worth watching.  A better driver in a better car catches more of them,
@@ -2340,10 +2390,22 @@ function resolveContact(dt) {
         const need = needGap(c);
         if (gap >= need) continue;
         const closing = c.v - ah.v;
-        c.s -= (need - gap);
+        /* Nudge, do not teleport.
+
+           This used to move the car the whole overlap in one go, three
+           passes a tick — so in traffic a car could be shoved several
+           lengths backwards between two frames, which is what the jumping
+           around in a busy pack was.  The correction is capped at roughly
+           what a car covers in a tick, and the speed cap below does the
+           rest over the next few frames.  Anything that cannot be resolved
+           gently is resolved by slowing down instead of by moving. */
+        const maxStep = Math.max(0.35, c.v * dt * 1.6);
+        c.s -= Math.min(need - gap, maxStep);
         if (c.s < 0) { c.s += tk.len; c.lap--; }
         if (c.s >= tk.len) { c.s -= tk.len; c.lap++; }
-        c.v = Math.min(c.v, ah.v * 0.985);
+        /* the tighter the squeeze, the harder the lift */
+        const squeeze = clamp((need - gap) / need, 0, 1);
+        c.v = Math.min(c.v, ah.v * (0.985 - squeeze * 0.10));
         if (pass === 0 && closing > 9 && c.spin <= 0 && ah.spin <= 0) {
           const hard = closing > 17;
           c.heat += hard ? 0.16 : 0.05;
@@ -2374,7 +2436,11 @@ function resolveContact(dt) {
         if (Math.abs(dl) >= need) continue;
         /* resolve the whole overlap, not half of it: at half, a pair being
            pushed together by the pack every tick never quite separates */
-        const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.85;
+        /* capped so two cars ease apart over a few frames rather than
+           snapping sideways in one */
+        const want = ((dl >= 0 ? 1 : -1) * need - dl) * 0.85;
+        const cap = 1.8 * dt;
+        const shove = clamp(want, -cap, cap);
         a.lane = clamp(a.lane - shove, 0.03, 0.97);
         b.lane = clamp(b.lane + shove, 0.03, 0.97);
         if (pass === 0) {
@@ -2468,8 +2534,13 @@ function bunchField() {
     const want = leadTotal - rank * SPACING;
     const cur = c.lap * tk.len + c.s;
     if (want <= cur) continue;                     // already closer than that
-    c.lap = Math.floor(want / tk.len);
-    c.s = want - c.lap * tk.len;
+    /* Close up over a couple of seconds rather than snapping into line:
+       under yellow the field really does concertina, but instantly
+       relocating fifteen cars reads as a glitch. */
+    const step = Math.min(want - cur, 90);
+    const nt = cur + step;
+    c.lap = Math.floor(nt / tk.len);
+    c.s = nt - c.lap * tk.len;
     c.v = Math.min(c.v, 22);
   }
 }
@@ -2621,7 +2692,17 @@ function showResults() {
   });
   const head = pos === 1 ? "<div class='bigwin'>🏁 VICTORY LANE 🏁</div>"
     : "<div class='bigpos " + (pos <= 3 ? "g" : "") + "'>" + ord(pos) + " place</div>";
-  const body = head + (me.dnf ? "<div class='r' style='text-align:center'>Did not finish</div>" : "") +
+  /* Say what actually ended the race.  "Did not finish" told you nothing:
+     an engine and a wall look identical on the results screen, and the
+     answer changes what you do next — one means repair before you enter
+     again, the other means the car is fine and you were unlucky. */
+  const why = !me.dnf ? ""
+    : me.blown ? "Engine let go"
+    : me.damage >= 82 ? "Too much damage to continue"
+    : me.wrecked ? "Collected in a wreck"
+    : "Did not finish";
+  const body = head + (me.dnf ? "<div class='r' style='text-align:center'>" + why + "</div>" +
+      (me.blown ? "<div class='small dim' style='text-align:center'>Repair the machine before you enter again.</div>" : "") : "") +
     "<table class='t'><tr><th>P</th><th>Driver</th><th>Pits</th></tr>" + rows + "</table>" +
     "<div class='small' style='margin-top:6px'>" +
     (prize ? "Purse <span class='g'>+" + fmtK(prize) + "</span> · " : "") +
@@ -4645,8 +4726,8 @@ function drawGarage() {
     txt(s, 5 * PX + 7 * (PX / 2), by + 8.5 * PX, "#20232c", 7);
     by += 15 * PX;
   };
-  if (G.build) bubble("Building - " + G.build.wks + "w left", "#2255cc");
-  if (G.repair) bubble("Repairing - " + G.repair.wks + "w left", "#e8332a");
+  /* shop work no longer takes weeks, so these only linger on an old save
+     and are cleared on the next tick */
   if (car && car.dur < carStats(car).maxdur * 0.35) bubble("Machine damaged", "#e8332a");
   if (!G.build && !G.repair && shopParts().some(p => G.money >= p.cost && !invCount(p.id)))
     bubble("Parts in stock", "#1a8a2e");
@@ -6088,8 +6169,7 @@ function scrCars() {
       bar(100 * c.dur / s.maxdur, c.dur < s.maxdur * .35 ? "d" : "") + "</div>" +
       (G.teams[G.curTeam].car === i ? "<span class='chip gold'>RACE</span>" : "") + "</div>";
   });
-  if (G.build) h += "<div class='small b'>Building " + esc(byId(CARS, G.build.carId).name) + " — " + G.build.wks + " week(s) left</div>";
-  if (G.repair) h += "<div class='small r'>Repairing — " + G.repair.wks + " week(s) left</div>";
+
   h += "<div class='small dim'>Garage slots " + G.cars.length + "/" + gl.cars + "</div>";
   dlg("Machines", h, [["\uD83D\uDED2 Buy a machine", () => { closeAllDlg(); scrShop("cars"); }], ["Close", () => closeAllDlg()]]);
 }
@@ -6121,7 +6201,7 @@ function rmPartUI(ci, pi) { removePart(G.cars[ci], pi); updateChrome(); closeDlg
 function scrBuild() { return scrShop("cars"); }
 function scrBuild_unused() {
   closeAllDlg();
-  if (G.build) return dlg("Build", "The crew is already building — " + G.build.wks + " week(s) left.", [["OK", () => { closeDlg(); scrCars(); }]]);
+
   const gl = GARAGES[G.garage];
   let h = "<div class='small dim'>Shop Tech " + Math.floor(shopTech()) + " sets build quality (100–160%). Library level raises the base stats permanently.</div>";
   CARS.filter(c => G.known.cars.includes(c.id)).forEach(c => {
@@ -6273,7 +6353,7 @@ function scrShop(tab) {
     }
   } else if (SHOP_TAB === "cars") {
     h += "<h4>Machines for sale</h4>";
-    if (G.build) h += "<div class='small dim'>The crew is building \u2014 " + G.build.wks + " to go.</div>";
+
     shopCars().forEach(c => {
       h += "<div class='row'><span class='chip rank'>" + c.rank + "</span><div class='f1'><b class='b'>" +
         esc(c.name) + "</b><div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl +
@@ -6626,7 +6706,7 @@ function nextStep() {
   if (!car) return { t: "Your team has no machine. Pick one from <b>Machines</b>.", b: "Machines", f: scrCars };
 
   const st = carStats(car);
-  if (G.repair) return { t: "The crew is repairing the machine — <b>" + G.repair.wks + " week(s)</b> left. Let the clock run.", b: "Wait", f: () => { G.set.paused = false; updateChrome(); } };
+
   if (car.dur < st.maxdur * 0.35)
     return { t: "#" + car.num + " is <b>badly damaged</b> and will blow up mid-race. Repair it first.", b: "Repair", f: () => { startRepair(t.car); updateChrome(); } };
 
@@ -6705,12 +6785,6 @@ function scrDevelop() {
   let h = "<div class='small dim'>Money <b class='g'>" + fmtK(G.money) +
     "</b> \u00b7 shop tech <b>" + Math.floor(shopTech()) + "</b> \u00b7 shelf <b>" +
     ((G.inv || []).length) + " part(s)</b></div>";
-
-  if (G.build) {
-    h += "<h4>In build</h4><div class='row'><div class='f1'><b class='b'>" +
-      esc(byId(CARS, G.build.carId).name) + "</b><div class='small dim'>" +
-      G.build.wks + " week(s) left</div></div></div>";
-  }
 
   /* ---- the machine, and its slots ---- */
   if (car) {

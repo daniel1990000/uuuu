@@ -51,7 +51,7 @@ function makeEntry(name, team, perf, col, num, opts) {
     tyre: "medium", mode: "normal", pitArmed: 0, pitKind: "both",
     /* crash state: heat is how close this car is to a mistake, spin is the
        seconds it spends gathering one up, damage slows it for good */
-    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0,
+    heat: 0, spin: 0, spinAng: 0, spinRate: 0, damage: 0, wrecked: 0, nudge: 0, blown: 0,
   }, opts || {});
 }
 
@@ -353,6 +353,37 @@ function raceTick(dt) {
       if (c.spin <= 0) { c.nudge = 0; c.spinRate = 0; c.spinAng = 0; }
       continue;
     }
+    /* ---- mechanical failure ----
+       This used to be tested only as a car crossed the start line, so every
+       engine in the game let go at exactly the same three metres of road and
+       nowhere else.  It is a per-second risk now, checked wherever the car
+       happens to be, and it does not simply delete the car: it lets go, you
+       see and hear it, and the car slows and drags itself out of the way. */
+    if (!c.blown && !R.yellow && c.lap > 0) {
+      const worn = c.isP ? 1 - clamp(c.dur / Math.max(1, c.maxdur), 0, 1) : 0;
+      const md = MODES[c.mode] || MODES.normal;
+      /* Per second, not per tick.  The first cut multiplied by dt AND by 60,
+         which made it a per-tick probability sixty times too large: over
+         twenty-six races the entire field let go, 412 engines in all.  A
+         Measured over twenty-four races rather than reasoned about: a fresh
+         machine should let go in well under one race in ten, and one run
+         into the ground in roughly a third. The first numbers put a healthy
+         car at one in eight, which punishes you for nothing you did. */
+      const rate = (c.isP ? 0.00011 + worn * 0.00085 : 0.00010) * (md.risk > 1 ? 1.5 : 1);
+      if (Math.random() < rate * dt) blowUp(c, tk);
+    }
+    if (c.blown) {
+      c.v = Math.max(0, c.v - 14 * dt);
+      c.lane += clamp(0.6 - c.lane, -0.5 * dt, 0.5 * dt);   // limp to the apron
+      if (typeof fxTrail === "function" && Math.random() < 0.6) {
+        const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+        fxTrail("smoke", wp.x, wp.y);
+      }
+      if (c.v < 1.5 && !c.dnf) { c.dnf = true; }
+      c.s += c.v * dt;
+      continue;
+    }
+
     /* a hurt car trails smoke for the rest of the day */
     if (c.damage > 24 && Math.random() < c.damage / 900) {
       if (typeof fxTrail === "function") {
@@ -518,12 +549,6 @@ function raceTick(dt) {
            thing to understand. */
         R.rp += 2.2 + (c.anl || 10) / 16;
         R.ad += (c.adRate || 10) / 14;
-        if (c.dur <= 0 && !c.dnf) { c.dnf = true; banner("ENGINE LET GO — DNF", 3); sfx("bad"); }
-      } else if (Math.random() < 0.0012 && c.lap > 3) {
-        /* Rivals break too, but this used to be the leading cause of
-           retirement — nearly two a race, which is more than the wrecks.
-           Mechanical trouble should be the rarer story. */
-        c.dnf = true;
       }
       /* pit decision at the line — yours is a call you make, theirs is not */
       const lapsLeft = track.laps - c.lap;
@@ -568,6 +593,21 @@ function raceTick(dt) {
    Not every mistake is a wreck.  Most are a twitch the driver catches;
    some cost a couple of seconds; the bad ones end in the fence and take
    whoever was close enough with them. */
+/* An engine lets go: smoke, a bang, and a car that is done for the day. */
+function blowUp(c, tk) {
+  c.blown = 1;
+  const wp = offsetPoint(sampleTrack(tk, c.s), laneWorld(c.lane));
+  if (typeof fxBurst === "function") {
+    fxBurst("smoke", wp.x, wp.y, 16);
+    fxBurst("spark", wp.x, wp.y, 8);
+  }
+  sfx("crash");
+  if (c.isP) {
+    if (typeof fxShake === "function") fxShake(4);
+    banner("ENGINE LETS GO \u2014 YOUR RACE IS RUN", 3);
+  } else banner("#" + c.num + " IS SMOKING", 1.8);
+}
+
 function carMistake(c, tk, curv) {
   /* Most moments are caught — that is what makes the ones that are not
      worth watching.  A better driver in a better car catches more of them,
@@ -748,10 +788,22 @@ function resolveContact(dt) {
         const need = needGap(c);
         if (gap >= need) continue;
         const closing = c.v - ah.v;
-        c.s -= (need - gap);
+        /* Nudge, do not teleport.
+
+           This used to move the car the whole overlap in one go, three
+           passes a tick — so in traffic a car could be shoved several
+           lengths backwards between two frames, which is what the jumping
+           around in a busy pack was.  The correction is capped at roughly
+           what a car covers in a tick, and the speed cap below does the
+           rest over the next few frames.  Anything that cannot be resolved
+           gently is resolved by slowing down instead of by moving. */
+        const maxStep = Math.max(0.35, c.v * dt * 1.6);
+        c.s -= Math.min(need - gap, maxStep);
         if (c.s < 0) { c.s += tk.len; c.lap--; }
         if (c.s >= tk.len) { c.s -= tk.len; c.lap++; }
-        c.v = Math.min(c.v, ah.v * 0.985);
+        /* the tighter the squeeze, the harder the lift */
+        const squeeze = clamp((need - gap) / need, 0, 1);
+        c.v = Math.min(c.v, ah.v * (0.985 - squeeze * 0.10));
         if (pass === 0 && closing > 9 && c.spin <= 0 && ah.spin <= 0) {
           const hard = closing > 17;
           c.heat += hard ? 0.16 : 0.05;
@@ -782,7 +834,11 @@ function resolveContact(dt) {
         if (Math.abs(dl) >= need) continue;
         /* resolve the whole overlap, not half of it: at half, a pair being
            pushed together by the pack every tick never quite separates */
-        const shove = ((dl >= 0 ? 1 : -1) * need - dl) * 0.85;
+        /* capped so two cars ease apart over a few frames rather than
+           snapping sideways in one */
+        const want = ((dl >= 0 ? 1 : -1) * need - dl) * 0.85;
+        const cap = 1.8 * dt;
+        const shove = clamp(want, -cap, cap);
         a.lane = clamp(a.lane - shove, 0.03, 0.97);
         b.lane = clamp(b.lane + shove, 0.03, 0.97);
         if (pass === 0) {
@@ -876,8 +932,13 @@ function bunchField() {
     const want = leadTotal - rank * SPACING;
     const cur = c.lap * tk.len + c.s;
     if (want <= cur) continue;                     // already closer than that
-    c.lap = Math.floor(want / tk.len);
-    c.s = want - c.lap * tk.len;
+    /* Close up over a couple of seconds rather than snapping into line:
+       under yellow the field really does concertina, but instantly
+       relocating fifteen cars reads as a glitch. */
+    const step = Math.min(want - cur, 90);
+    const nt = cur + step;
+    c.lap = Math.floor(nt / tk.len);
+    c.s = nt - c.lap * tk.len;
     c.v = Math.min(c.v, 22);
   }
 }
@@ -1029,7 +1090,17 @@ function showResults() {
   });
   const head = pos === 1 ? "<div class='bigwin'>🏁 VICTORY LANE 🏁</div>"
     : "<div class='bigpos " + (pos <= 3 ? "g" : "") + "'>" + ord(pos) + " place</div>";
-  const body = head + (me.dnf ? "<div class='r' style='text-align:center'>Did not finish</div>" : "") +
+  /* Say what actually ended the race.  "Did not finish" told you nothing:
+     an engine and a wall look identical on the results screen, and the
+     answer changes what you do next — one means repair before you enter
+     again, the other means the car is fine and you were unlucky. */
+  const why = !me.dnf ? ""
+    : me.blown ? "Engine let go"
+    : me.damage >= 82 ? "Too much damage to continue"
+    : me.wrecked ? "Collected in a wreck"
+    : "Did not finish";
+  const body = head + (me.dnf ? "<div class='r' style='text-align:center'>" + why + "</div>" +
+      (me.blown ? "<div class='small dim' style='text-align:center'>Repair the machine before you enter again.</div>" : "") : "") +
     "<table class='t'><tr><th>P</th><th>Driver</th><th>Pits</th></tr>" + rows + "</table>" +
     "<div class='small' style='margin-top:6px'>" +
     (prize ? "Purse <span class='g'>+" + fmtK(prize) + "</span> · " : "") +

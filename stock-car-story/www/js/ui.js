@@ -434,8 +434,7 @@ function scrCars() {
       bar(100 * c.dur / s.maxdur, c.dur < s.maxdur * .35 ? "d" : "") + "</div>" +
       (G.teams[G.curTeam].car === i ? "<span class='chip gold'>RACE</span>" : "") + "</div>";
   });
-  if (G.build) h += "<div class='small b'>Building " + esc(byId(CARS, G.build.carId).name) + " — " + G.build.wks + " week(s) left</div>";
-  if (G.repair) h += "<div class='small r'>Repairing — " + G.repair.wks + " week(s) left</div>";
+
   h += "<div class='small dim'>Garage slots " + G.cars.length + "/" + gl.cars + "</div>";
   dlg("Machines", h, [["\uD83D\uDED2 Buy a machine", () => { closeAllDlg(); scrShop("cars"); }], ["Close", () => closeAllDlg()]]);
 }
@@ -467,7 +466,7 @@ function rmPartUI(ci, pi) { removePart(G.cars[ci], pi); updateChrome(); closeDlg
 function scrBuild() { return scrShop("cars"); }
 function scrBuild_unused() {
   closeAllDlg();
-  if (G.build) return dlg("Build", "The crew is already building — " + G.build.wks + " week(s) left.", [["OK", () => { closeDlg(); scrCars(); }]]);
+
   const gl = GARAGES[G.garage];
   let h = "<div class='small dim'>Shop Tech " + Math.floor(shopTech()) + " sets build quality (100–160%). Library level raises the base stats permanently.</div>";
   CARS.filter(c => G.known.cars.includes(c.id)).forEach(c => {
@@ -619,7 +618,7 @@ function scrShop(tab) {
     }
   } else if (SHOP_TAB === "cars") {
     h += "<h4>Machines for sale</h4>";
-    if (G.build) h += "<div class='small dim'>The crew is building \u2014 " + G.build.wks + " to go.</div>";
+
     shopCars().forEach(c => {
       h += "<div class='row'><span class='chip rank'>" + c.rank + "</span><div class='f1'><b class='b'>" +
         esc(c.name) + "</b><div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl +
@@ -972,7 +971,7 @@ function nextStep() {
   if (!car) return { t: "Your team has no machine. Pick one from <b>Machines</b>.", b: "Machines", f: scrCars };
 
   const st = carStats(car);
-  if (G.repair) return { t: "The crew is repairing the machine — <b>" + G.repair.wks + " week(s)</b> left. Let the clock run.", b: "Wait", f: () => { G.set.paused = false; updateChrome(); } };
+
   if (car.dur < st.maxdur * 0.35)
     return { t: "#" + car.num + " is <b>badly damaged</b> and will blow up mid-race. Repair it first.", b: "Repair", f: () => { startRepair(t.car); updateChrome(); } };
 
@@ -1051,12 +1050,6 @@ function scrDevelop() {
   let h = "<div class='small dim'>Money <b class='g'>" + fmtK(G.money) +
     "</b> \u00b7 shop tech <b>" + Math.floor(shopTech()) + "</b> \u00b7 shelf <b>" +
     ((G.inv || []).length) + " part(s)</b></div>";
-
-  if (G.build) {
-    h += "<h4>In build</h4><div class='row'><div class='f1'><b class='b'>" +
-      esc(byId(CARS, G.build.carId).name) + "</b><div class='small dim'>" +
-      G.build.wks + " week(s) left</div></div></div>";
-  }
 
   /* ---- the machine, and its slots ---- */
   if (car) {

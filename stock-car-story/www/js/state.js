@@ -250,23 +250,9 @@ function advanceWeek() {
   }
   for (const c of G.crew) if (Math.random() < 0.13) { const k = pick(["ap", "tc", "an"]); c[k] += 1; }
 
-  if (G.build) {
-    G.build.wks--;
-    if (G.build.wks <= 0) {
-      const car = buildCarInstance(G.build.carId, G.build.quality);
-      if (G.build.slot < G.cars.length) G.cars[G.build.slot] = car; else G.cars.push(car);
-      toast("Machine complete!<br><span class='b'>" + esc(car.name) + "</span> — build quality " + Math.round(G.build.quality * 100) + "%");
-      sfx("ok"); G.build = null;
-    }
-  }
-  if (G.repair) {
-    G.repair.wks--;
-    if (G.repair.wks <= 0) {
-      const car = G.cars[G.repair.slot];
-      if (car) car.dur = carStats(car).maxdur;
-      toast("Repairs finished."); G.repair = null;
-    }
-  }
+  /* a safety net for any save that still carries outstanding shop work */
+  if (G.build) finishBuildNow();
+  if (G.repair) finishRepairNow();
   /* merchandising trickle */
   G.money += Math.floor(G.fans / 2500);
   /* random events */
@@ -446,9 +432,8 @@ function startBuild(carId, slot, auraTier) {
   let q = 1 + Math.min(0.45, shopTech() / 420) + rnd(0, 0.06);
   if (auraTier) { const a = spendAura(auraTier); if (a) q += 0.06 * a.mult; }
   q = Math.min(1.6, q);
-  const wks = Math.max(2, Math.round(5 - shopTech() / 160));
-  G.build = { carId, slot, quality: q, wks };
-  toast("Build started: <span class='b'>" + esc(def.name) + "</span><br>" + wks + " weeks");
+  G.build = { carId, slot, quality: q, wks: 0 };
+  finishBuildNow();
 }
 function installPart(car, partId, auraTier) {
   const s = carStats(car);
@@ -473,14 +458,39 @@ function repairCost(car) {
   if (G.sponsors.some(x => x.id === "piggy" && x.filled)) c = Math.round(c / 2);
   return c;
 }
+/* Shop work finishes when you pay for it.
+
+   Builds and repairs were measured in weeks, and weeks only passed while
+   the shop clock ticked.  Removing that clock left them waiting on
+   something that never happens: the objective card said "let the clock
+   run" next to a Wait button that did nothing, and a damaged machine could
+   not be repaired and could not race — a dead end with no way out of it.
+
+   A race is a month, so the shop has a month to do the work regardless.
+   You pay, it is done. */
+function finishBuildNow() {
+  if (!G.build) return;
+  const car = buildCarInstance(G.build.carId, G.build.quality);
+  if (G.build.slot < G.cars.length) G.cars[G.build.slot] = car; else G.cars.push(car);
+  toast("Machine ready!<br><span class='b'>" + esc(car.name) + "</span> \u2014 build quality " +
+    Math.round(G.build.quality * 100) + "%");
+  sfx("ok"); G.build = null;
+}
+function finishRepairNow() {
+  if (!G.repair) return;
+  const car = G.cars[G.repair.slot];
+  if (car) car.dur = carStats(car).maxdur;
+  toast("The machine is repaired."); sfx("ok"); G.repair = null;
+}
+
 function startRepair(slot) {
   const car = G.cars[slot]; if (!car) return;
   const cost = repairCost(car);
   if (G.repair) return toast("The crew is already repairing.");
   if (G.money < cost) return toast("Not enough money.");
   G.money -= cost;
-  G.repair = { slot, wks: Math.max(1, Math.round(2 - shopTech() / 200)) };
-  toast("Repairing — " + G.repair.wks + " week(s), " + fmtK(cost));
+  G.repair = { slot, wks: 0 };
+  finishRepairNow();
 }
 /* Is the next garage unlocked yet?
 

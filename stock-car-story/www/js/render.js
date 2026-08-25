@@ -513,8 +513,8 @@ function drawGarage() {
     txt(s, 5 * PX + 7 * (PX / 2), by + 8.5 * PX, "#20232c", 7);
     by += 15 * PX;
   };
-  if (G.build) bubble("Building - " + G.build.wks + "w left", "#2255cc");
-  if (G.repair) bubble("Repairing - " + G.repair.wks + "w left", "#e8332a");
+  /* shop work no longer takes weeks, so these only linger on an old save
+     and are cleared on the next tick */
   if (car && car.dur < carStats(car).maxdur * 0.35) bubble("Machine damaged", "#e8332a");
   if (!G.build && !G.repair && shopParts().some(p => G.money >= p.cost && !invCount(p.id)))
     bubble("Parts in stock", "#1a8a2e");
