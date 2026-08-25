@@ -732,7 +732,20 @@ function scrRaces() {
   let h = "<div class='small'>" + esc(drv.name) + " · #" + car.num + " " + esc(car.name) +
     "<br><span class='dim'>Energy " + Math.floor(drv.energy) + " · Durability " + car.dur + "/" + s.maxdur + "</span></div>";
   if (car.dur < s.maxdur * 0.3) h += "<div class='small r'>⚠ The machine is badly damaged — repair before racing.</div>";
-  if (SEASON) h += "<div class='small b'>Season in progress: " + SEASON.def.n + " (round " + (SEASON.round + 1) + "/" + SEASON.def.tracks.length + ")</div>";
+  if (SEASON) {
+    /* Mid-season you could not see the table anywhere: standings only
+       appeared on the screen straight after a round, and closing it was
+       the last you saw of them.  A championship you cannot check is not
+       much of a championship. */
+    const arr = standingsArray(SEASON);
+    const me = arr.findIndex(e => e.isP) + 1;
+    const nx = byId(TRACKS, SEASON.def.tracks[SEASON.round]);
+    h += "<div class='row'><div class='f1'><b class='b'>" + esc(SEASON.def.n) + "</b>" +
+      "<div class='small dim'>Round " + (SEASON.round + 1) + " of " + SEASON.def.tracks.length +
+      (nx ? " \u00b7 next up " + esc(nx.n) : "") + "</div>" +
+      "<div class='small'>You are <b>" + ord(me) + "</b> on <b>" + SEASON.mePts + "</b> points</div></div>" +
+      "<button class='pill gold' onclick='showStandings(SEASON,false)'>Table</button></div>";
+  }
   h += "<h4>Championships</h4>";
   SERIES.forEach(sd => {
     const ok = G.garage >= sd.req.garage;
@@ -892,6 +905,14 @@ function scrOptions() {
   const sc = finalScore();
   dlg("Options",
     "<div class='row'><div class='f1'>Sound effects</div><button class='pill' onclick='G.set.sfx=!G.set.sfx;closeAllDlg();scrOptions()'>" + (G.set.sfx ? "ON" : "OFF") + "</button></div>" +
+    /* The crowd is the most expensive thing the game draws, and how much a
+       phone can take varies wildly.  Rather than pick one number for every
+       device, the dial is here: Low keeps the racing identical and thins out
+       the grandstands, which is the only thing it touches. */
+    "<h4>Crowd detail</h4>" +
+    segBar([["high", "Full"], ["med", "Medium"], ["low", "Low"]], G.set.crowd || "high", "setCrowd") +
+    "<div class='small dim'>Turn this down if the race stutters. It changes how many people and stand " +
+    "sections are drawn each frame and nothing else \u2014 the racing is identical.</div>" +
     "<div class='row'><div class='f1'>Save now</div><button class='pill' onclick='toast(saveGame()?\"Saved.\":\"Save failed.\")'>Save</button></div>" +
     "<div class='row'><div class='f1'>Current score</div><b>" + sc.score.toLocaleString() + "</b></div>" +
     "<div class='row'><div class='f1 small'>Library: " + sc.vt + " machines, " + sc.pt + " parts developed</div></div>" +
@@ -900,6 +921,18 @@ function scrOptions() {
     "<div class='small dim' style='margin-top:6px'>Stock Car Story — an original management sim in the classic Japanese pixel-sim tradition. Art and code are original work.</div>",
     [["Close", () => closeAllDlg()]]);
 }
+function setCrowd(k) {
+  G.set.crowd = k;
+  applyCrowdSetting();
+  closeAllDlg(); scrOptions();
+}
+/* Push the setting into the renderer's per-frame budgets. */
+function applyCrowdSetting() {
+  const k = (G && G.set && G.set.crowd) || "high";
+  const v = { high: [13, 240], med: [8, 130], low: [4, 60] }[k] || [13, 240];
+  if (typeof STAND_BUDGET !== "undefined") { STAND_BUDGET = v[0]; CROWD_BUDGET = v[1]; }
+}
+
 function confirmRestart(keepLib) {
   dlg(keepLib ? "New Game+" : "Wipe Save",
     keepLib ? "Start a fresh career keeping every machine and part level you've developed." :

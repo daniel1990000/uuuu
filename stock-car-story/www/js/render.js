@@ -1078,6 +1078,7 @@ function drawInnerWall(tk, HALF, d0, d1, step) {
 }
 
 /* outer wall, SAFER stripes, ad boards, catch fence, grandstands */
+let STAND_BUDGET = 13, CROWD_BUDGET = 240;
 function drawOuterFurniture(tk, HALF, d0, d1, step) {
   const runs = straightRuns(tk);
   const fs = runs.find(r => r.start <= tk.sfDist && r.end >= tk.sfDist);
@@ -1095,7 +1096,7 @@ function drawOuterFurniture(tk, HALF, d0, d1, step) {
      full with a crowd in it.  Sections are capped and the crowd has a
      sprite budget; both spend themselves nearest-first, so what you lose
      is people in the far corner of a stand you can barely see. */
-  let standBudget = 13, crowdBudget = 240;
+  let standBudget = STAND_BUDGET, crowdBudget = CROWD_BUDGET;
   const standStep = Math.max(8, step * 3);
   for (let d = Math.floor(d0 / standStep) * standStep; d <= d1; d += standStep) {
     if (!onStraight(d)) continue;

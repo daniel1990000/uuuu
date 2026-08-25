@@ -52,7 +52,7 @@ function newGame(carry) {
     garage: 1, build: null, repair: null,
     hiredNames: [],
     stats: { races: 0, wins: 0, podiums: 0, titles: 0, earned: 0, upgrades: 0, adTotal: 0 },
-    set: { sfx: true, music: false, paused: false, speed: 1 },
+    set: { sfx: true, music: false, paused: false, speed: 1, crowd: "high" },
     curTeam: 0, clearPts: 0, ended: false, seenIntro: false,
     bailoutUsed: false, log: [],
   };
@@ -564,8 +564,37 @@ function loadGame() {
     if (!G.lib) G.lib = loadLibrary();
     if (!G.sponsorsFilled) G.sponsorsFilled = G.sponsors.filter(s => s.filled).map(s => s.id);
     if (!G.sponsorProgress) G.sponsorProgress = {};
+    migrateSave();
+    /* this had been written after the return, so it never ran and a saved
+       crowd setting was ignored until the player opened Options again */
+    if (typeof applyCrowdSetting === "function") applyCrowdSetting();
     return true;
   } catch (e) { return false; }
+}
+
+/* Bring an older save up to the current model.
+
+   Parts used to be researched into a "known" list and then paid for again
+   at the moment of fitting; they are bought into a shelf now.  A save from
+   before that arrives with a full known list and an empty shelf, so a
+   returning player could not fit anything at all.  Everything they had
+   already unlocked and is not already bolted to a car is put on the shelf
+   — they paid for it once, under the old rules. */
+function migrateSave() {
+  if (!G.set) G.set = {};
+  if (!G.set.crowd) G.set.crowd = "high";
+  if (typeof G.money !== "number" || !Number.isFinite(G.money)) G.money = 500;
+  if (!G.stats) G.stats = { races: 0, wins: 0, titles: 0, earned: 0 };
+  if (!Array.isArray(G.inv)) {
+    G.inv = [];
+    const fitted = {};
+    for (const car of (G.cars || [])) for (const p of (car.parts || [])) fitted[p.id] = true;
+    for (const id of (G.known && G.known.parts) || []) {
+      if (!fitted[id] && byId(PARTS, id)) G.inv.push({ id: id, qual: 0.9 });
+    }
+    /* leftover research data becomes what it is worth now: cash */
+    if (typeof G.rp === "number" && G.rp > 0) { G.money += Math.round(G.rp * 1.6); G.rp = 0; }
+  }
 }
 function hasSave() { try { return !!localStorage.getItem(SAVEKEY); } catch (e) { return false; } }
 

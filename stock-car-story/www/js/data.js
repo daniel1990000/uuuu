@@ -94,13 +94,13 @@ const PARTS = [
 
  // --- Drivetrain ---
  {id:"gear4",  name:"4-Speed Gearbox", cat:"Drive",  rank:"D", res:30,  cost:60,  fx:{acc:12},
-  desc:"Better ratios off the corner.", unlock:{t:"date",y:1,m:10}},
+  desc:"Better ratios off the corner.", unlock:{t:"start"}},
  {id:"gear6",  name:"Close-Ratio Box", cat:"Drive",  rank:"B", res:100, cost:180, fx:{acc:26,spd:8},
   desc:"Keeps the motor in its window.", unlock:{t:"wins",n:10}},
 
  // --- Pit equipment: stop time and fuel range ---
  {id:"pitgun", name:"Turbo Lug Gun",   cat:"Pit",    rank:"C", res:40,  cost:90,  fx:{pit:22},
-  desc:"Seconds off every stop.", unlock:{t:"sponsor",id:"wrench"}},
+  desc:"Seconds off every stop.", unlock:{t:"start"}},
  {id:"fuelcell",name:"Long-Run Cell",  cat:"Pit",    rank:"C", res:50,  cost:120, fx:{fuel:30,dur:10},
   desc:"Stretches a fuel run.", unlock:{t:"date",y:2,m:8}},
 ];

@@ -224,6 +224,8 @@ function boot() {
   $("scene").addEventListener("click", canvasTap);
   document.addEventListener("visibilitychange", () => { if (document.hidden && G && MODE === "shop") saveGame(); });
   window.addEventListener("pagehide", () => { if (G && MODE === "shop") saveGame(); });
+  /* saved settings have to reach the renderer before the first frame */
+  if (typeof applyCrowdSetting === "function") applyCrowdSetting();
   titleScreen();
   requestAnimationFrame(loop);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http"))
