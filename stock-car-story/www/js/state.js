@@ -39,7 +39,7 @@ function newGame(carry) {
   G = {
     v: 2,
     year: 1, month: 1, week: 1,
-    money: 500, rp: 20, fans: 100, adPoints: 0,
+    money: 500, rp: 0, fans: 100, adPoints: 0,
     lib,                                  // {cars:{id:{lv,up}}, parts:{id:{lv,up}}}
     known: { cars: ["street"], parts: [], trains: ["jog", "joyride", "read", "dance"] },
     drivers: [], crew: [], cars: [], teams: [],
@@ -176,6 +176,10 @@ function condMet(u) {
     case "sponsor": return (G.sponsorsFilled || []).includes(u.id);
     case "garage":  return G.garage >= u.lv;
     case "series":  return !!G.seriesWon[u.id];
+    /* Career wins.  Replaced the library-percentage conditions, which only
+       made sense while research existed and which a player could not see
+       the progress of anywhere. */
+    case "wins":    return (G.stats ? G.stats.wins : 0) >= u.n;
     case "partUp":  { const e = G.lib.parts[u.id]; return !!e && (e.lv > 1 || e.up >= u.pct); }
     case "carUp":   { const e = G.lib.cars[u.id];  return !!e && (e.lv > 1 || e.up >= u.pct); }
     case "partUp2": { const a = G.lib.parts[u.a], b = G.lib.parts[u.b];
@@ -185,9 +189,37 @@ function condMet(u) {
   }
   return false;
 }
-/* Which blueprints are researchable right now (condition met, not yet known) */
-function availableCarBlueprints() { return CARS.filter(c => !G.known.cars.includes(c.id) && condMet(c.unlock)); }
-function availablePartBlueprints() { return PARTS.filter(p => !G.known.parts.includes(p.id) && condMet(p.unlock)); }
+/* What the shop has on the shelf.  There is no research step any more, so
+   "available" means "you may buy this today", not "you may spend a second
+   currency to learn about it". */
+function shopCars()  { return CARS.filter(c => condMet(c.unlock)); }
+function shopParts() { return PARTS.filter(p => condMet(p.unlock)); }
+/* kept so older saves and any remaining callers keep working */
+function availableCarBlueprints() { return shopCars().filter(c => !G.known.cars.includes(c.id)); }
+function availablePartBlueprints() { return shopParts().filter(p => !G.known.parts.includes(p.id)); }
+
+/* ---------- parts inventory ----------
+   Parts you own but have not bolted on.  Buying puts one here, fitting
+   moves it to the machine, taking it off puts it back. */
+function invAdd(partId, qual) { (G.inv = G.inv || []).push({ id: partId, qual: qual }); }
+function invCount(partId) { return (G.inv || []).filter(x => x.id === partId).length; }
+function invTake(partId) {
+  const i = (G.inv || []).findIndex(x => x.id === partId);
+  return i < 0 ? null : G.inv.splice(i, 1)[0];
+}
+/* Buy a part into the inventory.  Build quality still comes off shop tech,
+   so a better crew is still worth having — it is just not a third currency. */
+function buyPart(partId) {
+  const p = byId(PARTS, partId);
+  if (!p) return;
+  if (G.money < p.cost) return toast("Not enough money.");
+  G.money -= p.cost;
+  const q = Math.min(1.3, 0.84 + Math.min(0.32, shopTech() / 340) + rnd(0, 0.06));
+  invAdd(partId, q);
+  if (!G.known.parts.includes(partId)) G.known.parts.push(partId);
+  sfx("ok");
+  toast(esc(p.name) + " delivered to the shop \u2014 quality " + Math.round(q * 100) + "%");
+}
 
 function refreshUnlocks(silent) {
   const news = [];
@@ -269,7 +301,7 @@ function onYear() {
 function fireEvent() {
   const e = pick(EVENTS);
   if (e.fx.fans) G.fans += e.fx.fans;
-  if (e.fx.rp) G.rp += e.fx.rp;
+  if (e.fx.rp) G.money += e.fx.rp;          // events pay cash now
   if (e.fx.money) G.money += e.fx.money;
   if (e.fx.ad) { G.adPoints += e.fx.ad; G.stats.adTotal += e.fx.ad; }
   G.log.push({ y: G.year, m: G.month, t: e.t });
@@ -315,7 +347,7 @@ function settleSponsors() {
 function grantSponsorReward(sp) {
   const rw = sp.rw;
   if (rw.t === "cash") { G.money += rw.amt; }
-  else if (rw.t === "rp") { G.rp += rw.amt; }
+  else if (rw.t === "rp") { G.money += rw.amt; }
   else if (rw.t === "train") { if (!G.known.trains.includes(rw.id)) G.known.trains.push(rw.id); }
   /* part/car rewards unlock the blueprint condition; research still needed */
   G.clearPts += 6;
@@ -339,7 +371,7 @@ function dropSponsor(id) {
 function rewardText(sp) {
   const rw = sp.rw;
   if (rw.t === "cash") return fmtK(rw.amt);
-  if (rw.t === "rp") return rw.amt + " RP";
+  if (rw.t === "rp") return fmtK(rw.amt);
   if (rw.t === "train") { const t = byId(TRAININGS, rw.id); return "Training: " + (t ? t.n : rw.id); }
   if (rw.t === "part") { const p = byId(PARTS, rw.id); return "Part: " + (p ? p.name : rw.id); }
   if (rw.t === "car") { const c = byId(CARS, rw.id); return "Machine: " + (c ? c.name : rw.id); }
@@ -371,15 +403,15 @@ function spendAura(tier) { if (G.auras[tier] > 0) { G.auras[tier]--; sfx("aura")
    ============================================================ */
 function researchCar(id) {
   const c = byId(CARS, id);
-  if (G.rp < c.res) return toast("Not enough research data.");
-  G.rp -= c.res; G.known.cars.push(id); libEntry("car", id);
+  if (G.money < c.res) return toast("Not enough money.");
+  G.money -= c.res; G.known.cars.push(id); libEntry("car", id);
   sfx("ok"); toast("<span class='b'>" + esc(c.name) + "</span> blueprints complete!");
   G.clearPts += 4;
 }
 function researchPart(id) {
   const p = byId(PARTS, id);
-  if (G.rp < p.res) return toast("Not enough research data.");
-  G.rp -= p.res; G.known.parts.push(id); libEntry("part", id);
+  if (G.money < p.res) return toast("Not enough money.");
+  G.money -= p.res; G.known.parts.push(id); libEntry("part", id);
   sfx("ok"); toast("<span class='b'>" + esc(p.name) + "</span> blueprints complete!");
   G.clearPts += 3;
 }
@@ -391,10 +423,10 @@ function upgradeCost(kind, id) {
 /* Upgrading raises upgrade% (and level at 100%).  Auras multiply the gain. */
 function doUpgrade(kind, id, auraTier) {
   const cost = upgradeCost(kind, id);
-  if (G.rp < cost) { toast("Not enough research data."); return false; }
+  if (G.money < cost) { toast("Not enough money."); return false; }
   const e = libEntry(kind, id);
   if (e.lv >= 6 && e.up >= 100) { toast("Already perfected!"); return false; }
-  G.rp -= cost;
+  G.money -= cost;
   let gain = 10;
   if (auraTier) { const a = spendAura(auraTier); if (a) gain = Math.round(gain * a.mult); }
   e.up += gain;
@@ -422,18 +454,18 @@ function installPart(car, partId, auraTier) {
   const s = carStats(car);
   if (car.parts.length >= s.exp) return toast("No free part slots.");
   if (car.parts.some(p => p.id === partId)) return toast("Already fitted.");
-  const p = byId(PARTS, partId);
-  if (G.money < p.cost) return toast("Not enough money.");
-  G.money -= p.cost;
-  let q = 0.80 + Math.min(0.35, shopTech() / 340) + rnd(0, 0.08);
-  if (auraTier) { const a = spendAura(auraTier); if (a) q += 0.05 * a.mult; }
-  q = Math.min(1.3, q);
+  const held = invTake(partId);
+  if (!held) return toast("You do not have that part. Buy one from the shop.");
+  let q = held.qual;
+  if (auraTier) { const a = spendAura(auraTier); if (a) q = Math.min(1.3, q + 0.05 * a.mult); }
   car.parts.push({ id: partId, qual: q });
   sfx("ok");
-  toast(esc(p.name) + " fitted — install quality " + Math.round(q * 100) + "%");
+  toast(esc(byId(PARTS, partId).name) + " fitted \u2014 quality " + Math.round(q * 100) + "%");
 }
+/* Taking a part off returns it to the shelf rather than destroying it. */
 function removePart(car, idx) {
-  car.parts.splice(idx, 1); G.rp += 4; toast("Part removed (+4 RP salvage).");
+  const gone = car.parts.splice(idx, 1)[0];
+  if (gone) { invAdd(gone.id, gone.qual); toast(esc(byId(PARTS, gone.id).name) + " back on the shelf."); }
 }
 function repairCost(car) {
   const s = carStats(car);
@@ -517,8 +549,8 @@ function checkLevel(s) {
 function levelCrew(i) {
   const c = G.crew[i], cost = c.lv * 35;
   if (c.lv >= 5) return toast("Max level.");
-  if (G.rp < cost) return toast("Need " + cost + " RP.");
-  G.rp -= cost; c.lv++; c.tc += 3; c.an += 2; c.ap += 1;
+  if (G.money < cost) return toast("Need " + fmtK(cost) + ".");
+  G.money -= cost; c.lv++; c.tc += 3; c.an += 2; c.ap += 1;
   sfx("ok"); toast(esc(c.name) + " is now Lv" + c.lv);
 }
 
@@ -541,7 +573,7 @@ function hasSave() { try { return !!localStorage.getItem(SAVEKEY); } catch (e) {
 function finalScore() {
   const s = G.stats;
   const vt = Object.keys(G.lib.cars).length, pt = Object.keys(G.lib.parts).length;
-  const score = Math.round(G.money * 0.3) + G.rp * 30 + s.wins * 2000 + s.titles * 15000 +
+  const score = Math.round(G.money * 0.3) + s.wins * 2000 + s.titles * 15000 +
     vt * 2500 + pt * 1300 + s.upgrades * 320 + G.sponsors.length * 950 + Math.round(s.adTotal * 2);
   return { score, vt, pt };
 }

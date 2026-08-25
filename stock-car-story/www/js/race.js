@@ -332,6 +332,7 @@ function raceTick(dt) {
         if (c.pitKind !== "fuel") c.tyreLife = 100;
         if (c.pitKind !== "tyres") c.fuel = 100;
         c.stops++;
+        if (c.isP) R.pitAsked = 0;         // ask again next time it matters
       }
       continue;
     }
@@ -357,6 +358,13 @@ function raceTick(dt) {
     const cornerCost = curv * (1.0 - Math.min(0.55, c.perf / 340));
     let target = (26 + c.perf * 0.62) * grip * (1 - cornerCost * 0.42);
     target *= mode.pace;
+    /* Staying out has to cost something or declining the stop is free.
+       An empty tank is a car coasting to the pits; bald tyres are a car
+       that will not turn — and the crash model already reads tyre life,
+       so the second one bites twice. */
+    if (c.fuel <= 0) target *= 0.42;
+    else if (c.fuel < 6) target *= 0.80;
+    if (c.tyreLife <= 0) target *= 0.72;
     if (c.damage) target *= 1 - Math.min(0.28, c.damage / 100);
     if (c.brake) target *= 1 + Math.min(0.05, c.brake / 400) * curv;
 
@@ -485,6 +493,9 @@ function raceTick(dt) {
            shorter than they were, and this is charged per lap, so the old
            figure was paying out less than it looks.  Analysis is still the
            lever: a crew built for it roughly doubles this. */
+        /* Race data used to be its own currency you spent in a research
+           screen.  It is prize money now: the same reward, one fewer
+           thing to understand. */
         R.rp += 2.2 + (c.anl || 10) / 16;
         R.ad += (c.adRate || 10) / 14;
         if (c.dur <= 0 && !c.dnf) { c.dnf = true; banner("ENGINE LET GO — DNF", 3); sfx("bad"); }
@@ -499,13 +510,12 @@ function raceTick(dt) {
       const needT = c.tyreLife < 26, needF = c.fuel < 14;
       let doStop = false;
       if (c.isP) {
+        /* Your stop is always your call.  The crew used to drag you in on
+           your behalf, which is why tyres and fuel appeared to reset out of
+           nowhere: the game was pitting for you and only saying so in a
+           banner you had already scrolled past.  Now it asks. */
         if (c.pitArmed) { doStop = true; c.pitArmed = 0; }
-        else if ((c.tyreLife < 26 || c.fuel < 15) && lapsLeft > 1) {
-          /* the crew will call you in rather than let you ruin the race —
-             calling it yourself, earlier and under caution, is the edge */
-          doStop = true; c.pitKind = "both";
-          banner("CREW CALLS YOU IN", 1.8);
-        }
+        else if (lapsLeft > 1) askPitWindow(c, lapsLeft);
       } else if ((needT || needF) && lapsLeft > 1) { doStop = true; c.pitKind = "both"; }
       if (doStop && lapsLeft >= 1) {
         const base = c.isP ? Math.max(3.2, 7.5 - shopTech() / 46) : rnd(5.5, 8);
@@ -816,6 +826,32 @@ function throwCaution() {
   banner("CAUTION — FIELD BUNCHES UP", 2.2);
   sfx("yellow");
 }
+/* ---------- the pit window ----------
+   Offered once per stint, at the point where a stop is actually the right
+   call, and never again for the same set — nagging every lap would be
+   worse than deciding for you.  Saying no is a real option: you keep
+   track position and take the consequences below. */
+function askPitWindow(c, lapsLeft) {
+  if (R.pitAsked) return;
+  const lowT = c.tyreLife < 30, lowF = c.fuel < 22;
+  if (!lowT && !lowF) return;
+  /* under caution a stop is half price, so that is the moment to offer it */
+  const prime = R.yellow || c.tyreLife < 18 || c.fuel < 14;
+  if (!prime) return;
+  R.pitAsked = 1;
+  const why = R.yellow ? "The caution is out — this is the cheap time to stop."
+    : lowF ? "You are nearly out of fuel." : "The tyres are gone.";
+  const state = "<div class='small dim'>Tyres <b>" + Math.round(c.tyreLife) + "%</b> · fuel <b>" +
+    Math.round(c.fuel) + "%</b> · " + lapsLeft + " laps to go</div>";
+  dlg("Box this lap?", "<div class='small'>" + why + "</div>" + state +
+    "<div class='small dim' style='margin-top:6px'>A tyres-only or fuel-only stop is quicker than both. " +
+    "Stay out and you keep the position, but you will be slow — and out of fuel means crawling.</div>",
+    [["Tyres", () => { closeAllDlg(); callPit("tyres"); }],
+     ["Fuel", () => { closeAllDlg(); callPit("fuel"); }],
+     ["Both", () => { closeAllDlg(); callPit("both"); }],
+     ["Stay out", () => { closeAllDlg(); banner("STAYING OUT", 1.4); }]]);
+}
+
 function fireAura() {
   if (!R || !R.auraTier || R.auraLeft <= 0 || R.phase !== "green") return;
   R.auraLeft--; R.auraT = AURAS[R.auraTier].dur;
@@ -898,7 +934,7 @@ function showResults() {
   const ad = Math.round(R.ad + track.ad * (pos === 1 ? 1 : pos <= 5 ? 0.6 : 0.3));
   G.adPoints += ad; G.stats.adTotal += ad;
   const rp = Math.round(R.rp);
-  G.rp += rp;
+  G.money += Math.round(rp * 1.6);   // paid as cash
 
   car.xp += 18; while (car.xp >= car.lv * 90) { car.xp -= car.lv * 90; car.lv++; }
   drv.xp += pos <= 3 ? 34 : 16; checkLevel(drv);
@@ -932,7 +968,7 @@ function showResults() {
     "<table class='t'><tr><th>P</th><th>Driver</th><th>Pits</th></tr>" + rows + "</table>" +
     "<div class='small' style='margin-top:6px'>" +
     (prize ? "Purse <span class='g'>+" + fmtK(prize) + "</span> · " : "") +
-    "Fans <span class='b'>+" + fans + "</span> · RP <span class='b'>+" + rp + "</span> · Ad <span class='b'>+" + ad + "</span>" +
+    "Fans <span class='b'>+" + fans + "</span> \u00b7 Ad <span class='b'>+" + ad + "</span>" +
     "<br>Cautions " + R.cautions + " · your stops " + me.stops + "</div>" + auraMsg;
 
   sfx(pos === 1 ? "win" : pos <= 3 ? "ok" : "bad");
@@ -940,7 +976,10 @@ function showResults() {
   if (seasonRef) seasonRef.lastFinish = R.finish.slice();
   R = null;
   exitRaceMode();
-  advanceWeek();
+  /* A race is a month.  The calendar used to creep forward in the shop
+     while you did nothing; it moves when you go racing now, so a season
+     is a season's worth of races rather than a clock you wait out. */
+  for (let w = 0; w < 4; w++) advanceWeek();
   updateChrome();
 
   if (seasonRef) {

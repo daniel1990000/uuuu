@@ -516,7 +516,8 @@ function drawGarage() {
   if (G.build) bubble("Building - " + G.build.wks + "w left", "#2255cc");
   if (G.repair) bubble("Repairing - " + G.repair.wks + "w left", "#e8332a");
   if (car && car.dur < carStats(car).maxdur * 0.35) bubble("Machine damaged", "#e8332a");
-  if (!G.build && !G.repair && G.rp >= 40) bubble("Research available", "#1a8a2e");
+  if (!G.build && !G.repair && shopParts().some(p => G.money >= p.cost && !invCount(p.id)))
+    bubble("Parts in stock", "#1a8a2e");
   if (G.offers.length && G.sponsors.length < 2) bubble("Sponsor offer waiting", "#c47b00");
 
   flushLabels();

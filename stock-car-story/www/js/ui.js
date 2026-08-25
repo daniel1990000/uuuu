@@ -73,13 +73,15 @@ function updateChrome() {
   if (!G) return;
   $("dateLcd").textContent = dateStr();
   $("moneyBox").textContent = fmtK(G.money);
-  $("rpBox").textContent = "RP " + Math.floor(G.rp);
+  $("rpBox").textContent = "\uD83C\uDFC6 " + (G.stats ? G.stats.wins : 0);
   $("fanBox").textContent = G.fans >= 10000 ? ((G.fans / 1000).toFixed(0) + "k") : G.fans >= 1000 ? ((G.fans / 1000).toFixed(1) + "k") : G.fans;
   const paused = !!G.set.paused, spd = G.set.speed || 1;
   const sp = $("speedBtn");
-  sp.classList.toggle("paused", paused);
-  sp.querySelector(".ico").textContent = paused ? "❚❚" : spd === 3 ? "▶▶▶" : spd === 2 ? "▶▶" : "▶";
-  sp.querySelector(".lbl").textContent = paused ? "PAUSED" : spd + "× SPEED";
+  if (sp) {
+    sp.classList.toggle("paused", paused);
+    sp.querySelector(".ico").textContent = paused ? "\u275a\u275a" : spd === 3 ? "\u25b6\u25b6\u25b6" : spd === 2 ? "\u25b6\u25b6" : "\u25b6";
+    sp.querySelector(".lbl").textContent = paused ? "PAUSED" : spd + "\u00d7 SPEED";
+  }
   const rs = $("raceSpeedBtn");
   if (rs) {
     rs.textContent = paused ? "❚❚" : spd + "×";
@@ -108,7 +110,8 @@ function statGrid(o, keys) {
 }
 const DKEYS = [["pd", "Pedal"], ["sh", "Shift"], ["st", "Steer"], ["ap", "Appl"], ["tc", "Tech"], ["an", "Anlys"]];
 const CKEYS = [["tc", "Tech"], ["ap", "Appl"], ["an", "Anlys"]];
-function libTag(kind, id) {
+function libTag(kind, id) { return ""; }
+function libTag_unused(kind, id) {
   const e = libEntry(kind, id);
   return "<span class='chip lv'>Lv" + e.lv + " " + e.up + "%</span>";
 }
@@ -127,8 +130,8 @@ function auraPicker(cb, verb) {
 function scrHelp() {
   closeAllDlg();
   dlg("How to play",
-    "<h4>The loop</h4><div class='small'>Race for prize money, fans and research data. " +
-    "Spend money on staff, machines and parts; spend research data on upgrades. " +
+    "<h4>The loop</h4><div class='small'>Race for prize money and fans. Money buys everything: " +
+    "parts from the shop, machines, staff and a bigger garage. There is one currency and one shop. " +
     "Win a championship to earn a bigger garage, then move up the ladder.</div>" +
     "<h4>Getting around</h4><div class='small'>The <b class='b'>card at the top</b> always says what to do next — " +
     "tap its button. The <b class='b'>tabs</b> along the bottom are your five screens. " +
@@ -137,7 +140,8 @@ function scrHelp() {
     "<h4>Race day</h4><div class='small'>Pick your <b>tyres</b> (grip against wear) before the flag. " +
     "During the race the <b class='b'>PIT</b> button calls your stop — tyres, fuel or both. A partial " +
     "stop is quicker, and stopping under caution costs about half the time. If you never call one, the " +
-    "crew will bring you in before the tyres are gone.</div>" +
+    "When a stop becomes the right call the game asks you once; nobody pits for you. Stay out and you " +
+    "keep the position, but bald tyres are slow and an empty tank is slower still.</div>" +
     "<h4>Driving modes</h4><div class='small'>The button beside PIT switches between " +
     "<b>\u25B2 Push</b>, <b>\u25CF Normal</b> and <b>\u25BC Conserve</b>, any lap you like. Push is real " +
     "lap time, but it eats tyres and fuel and it is how you end up in the fence. Conserve gives track " +
@@ -155,7 +159,7 @@ function scrHelp() {
     "<b>Sh</b> shift (getting off the corner) and <b>St</b> steer (holding a line). " +
     "Short tracks lean on steer, superspeedways on pedal.<br>" +
     "Everyone also carries <b>Ap</b> appeal, <b>Tc</b> tech and <b>An</b> analysis: appeal pulls fans and " +
-    "sponsors, tech decides how well the shop builds a machine, analysis is how fast research data comes in. " +
+    "sponsors, tech decides how well the shop builds a machine, and analysis brings in extra prize money. " +
     "Crew count triple on those three, drivers only half — so hire crew for the shop, drivers for the track.<br>" +
     "Machines: <b>Sp</b> top speed, <b>Ac</b> acceleration, <b>Hd</b> handling.</div>",
     [["Got it", () => closeAllDlg()]]);
@@ -234,10 +238,10 @@ function scrCrew(i) {
   const h = face(c, "crew") + " <b class='b'>" + esc(c.name) + "</b> Lv" + c.lv + "/5" +
     "<div class='small dim'>Salary " + fmtK(c.sal * (1 + (c.lv - 1) * 0.5)) + "/mo</div>" +
     statGrid(c, CKEYS) +
-    "<div class='small' style='margin-top:6px'>Level up costs <b class='b'>" + cost + " RP</b><br>" +
-    "<span class='dim'>Tech speeds builds, installs, repairs and pit stops. Analysis earns research data.</span></div>";
+    "<div class='small' style='margin-top:6px'>Level up costs <b class='g'>" + fmtK(cost) + "</b><br>" +
+    "<span class='dim'>Tech speeds builds, installs, repairs and pit stops. Analysis brings in extra prize money.</span></div>";
   dlg("Crew", h, [
-    ["Level Up (" + cost + " RP)", () => { levelCrew(i); updateChrome(); closeDlg(); scrCrew(i); }],
+    ["Level Up (" + fmtK(cost) + ")", () => { levelCrew(i); updateChrome(); closeDlg(); scrCrew(i); }],
     ["Back", () => { closeDlg(); scrTeam(); }]]);
 }
 function scrTeamEdit(i) {
@@ -361,7 +365,7 @@ function scrCars() {
   if (G.build) h += "<div class='small b'>Building " + esc(byId(CARS, G.build.carId).name) + " — " + G.build.wks + " week(s) left</div>";
   if (G.repair) h += "<div class='small r'>Repairing — " + G.repair.wks + " week(s) left</div>";
   h += "<div class='small dim'>Garage slots " + G.cars.length + "/" + gl.cars + "</div>";
-  dlg("Machines", h, [["Build New", scrBuild], ["Close", () => closeAllDlg()]]);
+  dlg("Machines", h, [["\uD83D\uDED2 Buy a machine", () => { closeAllDlg(); scrShop("cars"); }], ["Close", () => closeAllDlg()]]);
 }
 function scrCar(i) {
   const car = G.cars[i], s = carStats(car), def = byId(CARS, car.id);
@@ -388,7 +392,8 @@ function scrCar(i) {
   dlg("Machine", h, btns);
 }
 function rmPartUI(ci, pi) { removePart(G.cars[ci], pi); updateChrome(); closeDlg(); scrCar(ci); }
-function scrBuild() {
+function scrBuild() { return scrShop("cars"); }
+function scrBuild_unused() {
   closeAllDlg();
   if (G.build) return dlg("Build", "The crew is already building — " + G.build.wks + " week(s) left.", [["OK", () => { closeDlg(); scrCars(); }]]);
   const gl = GARAGES[G.garage];
@@ -413,7 +418,8 @@ function pickBuild(id) {
 /* ============================================================
    PARTS
    ============================================================ */
-function scrParts() {
+function scrParts() { return scrDevelop(); }
+function scrParts_unused() {
   closeAllDlg();
   const car = G.cars[G.teams[G.curTeam].car];
   if (!car) return dlg("Parts", "<div class='small'>Pick a race machine first.</div>", [["Close", () => closeAllDlg()]]);
@@ -440,7 +446,7 @@ function scrParts() {
   /* everything you have researched, grouped by category */
   const owned = PARTS.filter(p => G.known.parts.includes(p.id));
   let cat = "";
-  if (!owned.length) h += "<h4>No parts researched</h4><div class='small dim'>Research parts first — Develop → Research → Parts.</div>";
+  if (!owned.length) h += "<h4>Nothing on the shelf</h4><div class='small dim'>Buy parts in the Shop.</div>";
   owned.forEach(p => {
     if (p.cat !== cat) { cat = p.cat; h += "<h4>" + cat + "</h4>"; }
     const on = car.parts.some(x => x.id === p.id);
@@ -464,7 +470,7 @@ function scrParts() {
 function pickInstall(id) {
   const car = G.cars[G.teams[G.curTeam].car];
   if (!car) return toast("No machine to fit it to.");
-  auraPicker(a => { installPart(car, id, a); updateChrome(); closeAllDlg(); scrParts(); }, "part fitting");
+  auraPicker(a => { installPart(car, id, a); updateChrome(); closeAllDlg(); scrDevelop(); }, "part fitting");
 }
 /* Part effects in words, so the list reads without a legend. */
 const FX_NAME = { spd: "Speed", acc: "Accel", hdl: "Handling", dur: "Durability",
@@ -494,81 +500,89 @@ function segBar(opts, cur, fn) {
 }
 function setResSeg(k) { SEG_RES = k; scrResearch(); }
 
-function scrResearch() {
-  closeAllDlg();
-  let h = "<div class='small dim'>Research data comes from racing — your team's Analysis raises the rate.<br>" +
-    "You have <b class='b'>" + Math.floor(G.rp) + " RP</b> and <b class='g'>" + fmtK(G.money) + "</b>.</div>";
-  h += segBar([["car", "Machines"], ["part", "Parts"], ["garage", "Garage"]], SEG_RES, "setResSeg");
+/* ============================================================
+   SHOP — one screen, one currency.
 
-  if (SEG_RES === "garage") {
+   This was Research: race data was a second currency, spent in its own
+   screen, to learn blueprints you then paid money for a second time, with
+   a library level and an upgrade percentage on top.  Four ideas to buy a
+   set of tyres.  You buy parts with money now and they go on a shelf.
+   ============================================================ */
+function scrResearch() { scrShop(); }
+function scrShop(tab) {
+  closeAllDlg();
+  SHOP_TAB = tab || SHOP_TAB || "parts";
+  const t = G.teams[G.curTeam];
+  const car = G.cars[t.car];
+  let h = "<div class='small dim'>Money <b class='g'>" + fmtK(G.money) + "</b> \u00b7 career wins <b>" +
+    (G.stats ? G.stats.wins : 0) + "</b> \u00b7 shop tech <b>" + Math.floor(shopTech()) + "</b></div>";
+  h += segBar([["parts", "Parts"], ["cars", "Machines"], ["garage", "Garage"]], SHOP_TAB, "scrShop");
+
+  if (SHOP_TAB === "parts") {
+    const stock = shopParts();
+    h += "<h4>On the shelf</h4>";
+    let cat = "";
+    stock.forEach(p => {
+      if (p.cat !== cat) { cat = p.cat; h += "<h4>" + cat + "</h4>"; }
+      const own = invCount(p.id);
+      const fitted = car && car.parts.some(x => x.id === p.id);
+      h += "<div class='row'><span class='chip rank'>" + p.rank + "</span><div class='f1'><b>" +
+        esc(p.name) + "</b>" + (own ? " <span class='chip gold'>" + own + " in stock</span>" : "") +
+        (fitted ? " <span class='chip'>fitted</span>" : "") +
+        "<div class='small dim'>" + esc(p.desc || "") + "</div>" +
+        "<div class='small'>" + fxText(p.fx) + "</div></div>" +
+        "<button class='pill" + (G.money >= p.cost ? "" : " off") +
+        "' onclick=\"buyPart('" + p.id + "');scrShop('parts')\">" + fmtK(p.cost) + "</button></div>";
+    });
+    /* what is still to come, so the shelf never looks finished */
+    const later = PARTS.filter(p => !condMet(p.unlock) && p.unlock.t === "wins")
+      .sort((a, b) => a.unlock.n - b.unlock.n).slice(0, 3);
+    if (later.length) {
+      h += "<h4>Coming in</h4>";
+      later.forEach(p => {
+        h += "<div class='row'><span class='chip rank'>" + p.rank + "</span><div class='f1'><b class='dim'>" +
+          esc(p.name) + "</b><div class='small dim'>" + fxText(p.fx) + "</div></div>" +
+          "<span class='chip'>\uD83D\uDD12 " + p.unlock.n + " wins</span></div>";
+      });
+    }
+  } else if (SHOP_TAB === "cars") {
+    h += "<h4>Machines for sale</h4>";
+    if (G.build) h += "<div class='small dim'>The crew is building \u2014 " + G.build.wks + " to go.</div>";
+    shopCars().forEach(c => {
+      h += "<div class='row'><span class='chip rank'>" + c.rank + "</span><div class='f1'><b class='b'>" +
+        esc(c.name) + "</b><div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl +
+        " Dur" + c.dur + " \u00b7 " + c.exp + " part slots</div></div>" +
+        "<button class='pill" + (G.money >= c.cost && !G.build ? "" : " off") +
+        "' onclick=\"pickBuild('" + c.id + "')\">" + fmtK(c.cost) + "</button></div>";
+    });
+    const later = CARS.filter(c => !condMet(c.unlock) && c.unlock.t === "wins")
+      .sort((a, b) => a.unlock.n - b.unlock.n).slice(0, 3);
+    if (later.length) {
+      h += "<h4>Coming in</h4>";
+      later.forEach(c => h += "<div class='row'><div class='f1'><b class='dim'>" + esc(c.name) +
+        "</b><div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl + "</div></div>" +
+        "<span class='chip'>\uD83D\uDD12 " + c.unlock.n + " wins</span></div>");
+    }
+  } else {
     const gl = GARAGES[G.garage];
     h += "<h4>Current: " + gl.n + "</h4><div class='small dim'>Crew " + G.crew.length + "/" + gl.crew +
-      " · machines " + G.cars.length + "/" + gl.cars + " · teams " + G.teams.length + "/" + gl.teams + "</div>";
+      " \u00b7 machines " + G.cars.length + "/" + gl.cars + " \u00b7 teams " + G.teams.length + "/" + gl.teams + "</div>";
     const nx = GARAGES[G.garage + 1];
     if (!nx) h += "<h4>Fully upgraded</h4><div class='small g'>Nothing left to build.</div>";
     else {
       const locked = !garageUnlocked(nx);
       h += "<h4>Next</h4><div class='row'><div class='f1'><b class='b'>" + nx.n + "</b>" +
-        "<div class='small dim'>" + nx.crew + " crew · " + nx.cars + " machines · " + nx.teams + " teams</div>" +
+        "<div class='small dim'>" + nx.crew + " crew \u00b7 " + nx.cars + " machines \u00b7 " + nx.teams + " teams</div>" +
         "<div class='small'>Cost " + fmtK(nx.cost) + "</div></div>" +
         (locked ? "<div class='small r' style='max-width:44%'>\uD83D\uDD12 " + garageReqText(nx) + "</div>"
-          : "<button class='pill" + (G.money < nx.cost ? " off" : "") + "' onclick='upgradeGarage();updateChrome();closeAllDlg();scrResearch()'>Buy</button>") +
-        "</div>";
+          : "<button class='pill" + (G.money < nx.cost ? " off" : "") +
+            "' onclick='upgradeGarage();updateChrome();scrShop(\"garage\")'>Buy</button>") + "</div>";
     }
-    dlg("Research", h, [["Close", () => closeAllDlg()]]);
-    return;
   }
-
-  const isCar = SEG_RES === "car";
-  const kind = isCar ? "car" : "part";
-  const all = isCar ? CARS : PARTS;
-  const known = isCar ? G.known.cars : G.known.parts;
-  const nameOf = o => isCar ? o.name : o.name;
-  const descOf = o => isCar
-    ? ("Speed " + o.spd + " · Accel " + o.acc + " · Handling " + o.hdl + " · " + o.exp + " slots")
-    : (o.desc || o.cat);
-
-  /* step 1 — new blueprints you can research now */
-  const avail = all.filter(o => !known.includes(o.id) && condMet(o.unlock) && !(o.secret && !G.seriesWon.cup));
-  h += "<h4>① Research a blueprint</h4>";
-  if (!avail.length) h += "<div class='small dim'>Nothing new available — see Locked below.</div>";
-  avail.forEach(o => {
-    const can = G.rp >= o.res;
-    h += "<div class='row'><span class='chip rank'>" + o.rank + "</span>" +
-      "<div class='f1'><b class='b'>" + nameOf(o) + "</b>" +
-      "<div class='small dim'>" + descOf(o) + "</div></div>" +
-      "<button class='pill" + (can ? "" : " off") + "' onclick=\"doResearchUI('" + kind + "','" + o.id + "')\">" +
-      o.res + " RP</button></div>";
-  });
-
-  /* step 2 — what you own, and what it costs to make one */
-  h += "<h4>② Your blueprints</h4>";
-  if (!known.length) h += "<div class='small dim'>None yet.</div>";
-  known.forEach(id => {
-    const o = byId(all, id), e = libEntry(kind, id), cost = upgradeCost(kind, id);
-    const max = e.lv >= 6 && e.up >= 100;
-    h += "<div class='row'><span class='chip rank'>" + o.rank + "</span>" +
-      "<div class='f1'><b>" + nameOf(o) + "</b> <span class='chip lv'>Lv" + e.lv + " " + e.up + "%</span>" +
-      "<div class='small dim'>" + descOf(o) + "</div>" +
-      "<div class='small'>" + (isCar ? "Build cost " : "Buy cost ") + fmtK(o.cost) + "</div></div>" +
-      (max ? "<span class='chip gold'>MAX</span>"
-        : "<button class='pill" + (G.rp < cost ? " off" : "") + "' onclick=\"pickUpgrade('" + kind + "','" + id + "')\">" +
-          "▲ " + cost + "RP</button>") + "</div>";
-  });
-  h += "<div class='small dim'>③ Upgrading is permanent: it raises every machine or part you make from that blueprint, unlocks the next tier, and carries into New Game+.</div>";
-
-  /* locked, with the requirement spelled out */
-  const locked = all.filter(o => !known.includes(o.id) && !condMet(o.unlock) && !(o.secret && !G.seriesWon.cup));
-  if (locked.length) {
-    h += "<h4>Locked</h4>";
-    locked.forEach(o => {
-      h += "<div class='row' style='opacity:.72'><span class='chip rank'>" + o.rank + "</span>" +
-        "<div class='f1'><b class='dim'>" + nameOf(o) + "</b>" +
-        "<div class='small dim'>" + unlockText(o.unlock) + "</div></div><span class='chip'>🔒</span></div>";
-    });
-  }
-  dlg("Research", h, [["Close", () => closeAllDlg()]]);
+  dlg("Shop", h, [["Close", () => closeAllDlg()]]);
 }
+let SHOP_TAB = "parts";
+
 function doResearchUI(kind, id) {
   if (kind === "car") researchCar(id); else researchPart(id);
   updateChrome(); scrResearch();
@@ -594,7 +608,7 @@ function unlockText(u) {
   return "?";
 }
 function pickUpgrade(kind, id) {
-  if (G.rp < upgradeCost(kind, id)) return toast("Not enough research data.");
+  if (G.money < upgradeCost(kind, id)) return toast("Not enough money.");
   auraPicker(a => { doUpgrade(kind, id, a); updateChrome(); closeAllDlg(); scrResearch(); }, "upgrade");
 }
 
@@ -870,8 +884,8 @@ function nextStep() {
   if (drv.energy < 40)
     return { t: esc(drv.name) + " is worn out (" + Math.floor(drv.energy) + "/100). Rest a few weeks before racing.", b: "Wait", f: () => { G.set.paused = false; updateChrome(); } };
 
-  const nc = availableCarBlueprints().filter(c => G.rp >= c.res);
-  const np = availablePartBlueprints().filter(p => G.rp >= p.res);
+  const nc = shopCars().filter(c => G.money >= c.cost && !G.cars.some(x => x.id === c.id));
+  const np = shopParts().filter(p => G.money >= p.cost && !invCount(p.id));
   if (nc.length || np.length)
     return { t: "You can research <b>" + ((nc[0] || np[0]).name) + "</b> with your research data.", b: "Research", f: scrResearch };
 
@@ -907,7 +921,7 @@ function refreshObjective() {
     if (on && !d) { d = document.createElement("i"); d.className = "dot"; el.appendChild(d); }
     else if (!on && d) d.remove();
   };
-  badge("tabShop", availableCarBlueprints().some(c => G.rp >= c.res) || availablePartBlueprints().some(p => G.rp >= p.res));
+  badge("tabShop", shopParts().some(p => G.money >= p.cost && !invCount(p.id)));
   badge("tabRace", !!SEASON);
   badge("tabMore", G.offers.length > 0 && G.sponsors.length < 2);
   badge("tabTeam", anyAura());
@@ -929,9 +943,9 @@ function scrDevelop() {
   closeAllDlg();
   const t = G.teams[G.curTeam];
   const car = G.cars[t.car];
-  let h = "<div class='small dim'>Research data <b class='b'>" + Math.floor(G.rp) +
-    " RP</b> · Money <b class='g'>" + fmtK(G.money) + "</b> · Shop Tech <b>" +
-    Math.floor(shopTech()) + "</b></div>";
+  let h = "<div class='small dim'>Money <b class='g'>" + fmtK(G.money) +
+    "</b> \u00b7 shop tech <b>" + Math.floor(shopTech()) + "</b> \u00b7 shelf <b>" +
+    ((G.inv || []).length) + " part(s)</b></div>";
 
   if (G.build) {
     h += "<h4>In build</h4><div class='row'><div class='f1'><b class='b'>" +
@@ -968,17 +982,21 @@ function scrDevelop() {
     });
 
     /* everything you own that would go on it */
-    const spare = PARTS.filter(p => G.known.parts.includes(p.id) && !car.parts.some(x => x.id === p.id));
-    if (car.parts.length < s2.exp && spare.length) {
-      h += "<h4>Fit a part</h4>";
-      spare.forEach(p => {
-        const canPay = G.money >= partCostUI(p);
+    /* the shelf: parts you own and have not bolted on */
+    const shelfIds = [...new Set((G.inv || []).map(x => x.id))]
+      .filter(id => !car.parts.some(x => x.id === id));
+    if (car.parts.length < s2.exp && shelfIds.length) {
+      h += "<h4>On the shelf</h4>";
+      shelfIds.forEach(id => {
+        const p = byId(PARTS, id);
+        if (!p) return;
         h += "<div class='row'><span class='chip rank'>" + p.rank + "</span><div class='f1'><b>" +
-          esc(p.name) + "</b> " + libTag("part", p.id) +
-          "<div class='small'>" + fxText(p.fx) + "</div>" +
-          "<div class='small dim'>" + fmtK(partCostUI(p)) + "</div></div>" +
-          "<button class='pill" + (canPay ? "" : " off") + "' onclick=\"pickInstall('" + p.id + "')\">Fit</button></div>";
+          esc(p.name) + "</b> <span class='chip gold'>" + invCount(id) + "</span>" +
+          "<div class='small'>" + fxText(p.fx) + "</div></div>" +
+          "<button class='pill' onclick=\"pickInstall('" + id + "')\">Fit</button></div>";
       });
+    } else if (car.parts.length < s2.exp) {
+      h += "<div class='small dim' style='margin-top:6px'>Nothing on the shelf. Buy parts in the Shop.</div>";
     } else if (car.parts.length >= s2.exp) {
       h += "<div class='small dim' style='margin-top:6px'>Every slot on this machine is full. A better " +
         "chassis carries more.</div>";
@@ -987,20 +1005,6 @@ function scrDevelop() {
     h += "<h4>No machine</h4><div class='small dim'>Build one below to go racing.</div>";
   }
 
-  /* ---- build something better ---- */
-  const known = CARS.filter(c => G.known.cars.includes(c.id));
-  h += "<h4>Build a machine</h4>";
-  if (G.build) h += "<div class='small dim'>The crew is already building.</div>";
-  else known.forEach(c => {
-    h += "<div class='row'><div class='f1'><b class='b'>" + c.name + "</b> " + libTag("car", c.id) +
-      "<div class='small dim'>Sp" + c.spd + " Ac" + c.acc + " Hd" + c.hdl + " Dur" + c.dur +
-      " · " + c.exp + " slots · " + fmtK(c.cost) + "</div></div>" +
-      "<button class='pill" + (G.money >= c.cost ? "" : " off") +
-      "' onclick=\"pickBuild('" + c.id + "')\">Build</button></div>";
-  });
-
-  h += "<div class='small dim' style='margin-top:10px'>Research turns race data into new blueprints and " +
-    "permanent upgrades — those raise every machine you build from then on, and carry into New Game+.</div>";
-  dlg("Workshop", h, [["\uD83D\uDD2C Research", () => { closeAllDlg(); scrResearch(); }],
+  dlg("Workshop", h, [["\uD83D\uDED2 Shop", () => { closeAllDlg(); scrShop("parts"); }],
                       ["Close", () => closeAllDlg()]]);
 }

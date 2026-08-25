@@ -14,7 +14,6 @@ function enterRaceMode() {
   MODE = "race";
   $("objCard").classList.remove("on");
   $("tabbar").style.display = "none";
-  $("speedBtn").classList.remove("on");
   $("order").classList.add("on");
   $("raceHud").style.display = "flex";
   $("auraBtn").style.display = "none";
@@ -22,7 +21,6 @@ function enterRaceMode() {
 function exitRaceMode() {
   MODE = "shop";
   $("tabbar").style.display = "flex";
-  $("speedBtn").classList.add("on");
   $("order").classList.remove("on");
   $("raceHud").style.display = "none";
 }
@@ -53,7 +51,7 @@ function loop(ts) {
   lastT = ts; frame++;
 
   if (MODE === "title") {
-    $("tabbar").style.display = "none"; $("speedBtn").classList.remove("on");
+    $("tabbar").style.display = "none";
     try { drawTitle(); } catch (e) { fatal("title screen", e); }
     return;
   }
@@ -74,17 +72,12 @@ function loop(ts) {
     } catch (e) { fatal("race", e); }
     return;
   }
-  /* shop: time flows unless a dialog is open or the player paused */
-  if (!dlgStack.length && !G.set.paused) {
-    weekAcc += dt * (SPEED_MUL[G.set.speed] || 1);
-    if (weekAcc >= 1.5) {
-      weekAcc = 0;
-      advanceWeek();
-      updateChrome();
-      refreshObjective();
-      if (!G.ended && G.year === 14 && G.month === 4) { G.ended = true; showEndgame(); }
-    }
-  }
+  /* The shop no longer runs a clock.
+
+     Weeks used to tick by while you stood in the garage, so reading your
+     own screens aged the team and cost money, and the speed control existed
+     to make that waiting shorter.  A race is a month now: the calendar moves
+     when you go racing, and standing still costs nothing. */
   drawGarage();
   if (frame % 20 === 0) refreshObjective();
 }
@@ -151,7 +144,6 @@ function titleScreen() {
 function startShop() {
   MODE = "shop";
   $("tabbar").style.display = "flex";
-  $("speedBtn").classList.add("on");
   updateChrome();
   refreshObjective();
   if (!G.seenIntro) {
@@ -207,7 +199,6 @@ function boot() {
     else { G.set.speed = 1; G.set.paused = true; }
     updateChrome();
   };
-  $("speedBtn").onclick = cycleSpeed;
   $("raceSpeedBtn").onclick = cycleSpeed;
   $("auraBtn").onclick = fireAura;
   $("modeBtn").onclick = cycleMode;
