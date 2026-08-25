@@ -1,0 +1,55 @@
+name: Deploy Stock Car Story
+
+# Publishes the game to GitHub Pages.
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+# The site then lives at https://<owner>.github.io/<repo>/
+
+# No paths filter on purpose.  There was one, and it meant an empty commit
+# could not re-trigger a deploy — which is exactly what you reach for when
+# the code has not changed but the Pages setting has.  This is the only
+# workflow in the repository and the build takes seconds, so running it on
+# every push to the branch is worth more than the CI minutes it saves.
+on:
+  push:
+    branches: [claude/nascar-story-game-w36ol1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build the single-file bundle
+        working-directory: stock-car-story
+        run: node tools/build.js
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r stock-car-story/www/. _site/
+          mkdir -p _site/single
+          cp stock-car-story/dist/index.html _site/single/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,253 @@
+:root{
+  --navy:#1b2a6b; --navy2:#33449a; --navy3:#0d1638;
+  --gold:#ffd23f; --red:#e8332a; --blue:#2255cc; --green:#3fae4a;
+  --panel:#fff; --ink:#20232c; --line:#c9d2e2;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#000;position:fixed;width:100%}
+body{font-family:'Press Start 2P','Courier New',monospace;font-size:13px;color:var(--ink);
+  touch-action:manipulation;-webkit-user-select:none;user-select:none;overscroll-behavior:none;
+  -webkit-text-size-adjust:100%}
+/* Order matters and it was backwards: the later declaration wins, so
+   putting 100dvh first and 100vh second meant 100vh always won.  On
+   mobile Chrome 100vh is measured as if the address bar were hidden, so
+   the app was taller than the visible viewport and the tab bar sat below
+   the fold.  Fallback first, modern value last. */
+#app{height:100vh;height:100dvh;height:var(--appH, 100dvh);
+  max-width:600px;margin:0 auto;display:flex;flex-direction:column;
+  background:#79c34d;position:relative;overflow:hidden}
+
+/* ---------- chrome bars ---------- */
+#topbar{background:linear-gradient(#3f52b5,var(--navy) 55%,var(--navy3));
+  color:#fff;display:flex;align-items:center;gap:5px;flex:0 0 auto;z-index:5;
+  border-bottom:3px solid #000;padding:calc(env(safe-area-inset-top) + 5px) 5px 5px}
+.lcd{background:#0a1130;border:2px solid #000;border-radius:4px;padding:4px 5px;
+  box-shadow:inset 0 0 0 1px #3c50b0;white-space:nowrap;font-size:9px}
+#dateLcd{color:var(--gold);font-size:10px;text-shadow:1px 1px 0 #000}
+#rpBox{color:#7fd4ff}
+#fanBox{color:#ff9ecb}
+/* Each readout says what it is.  A bare number in a corner teaches nobody
+   which currency it is, and the cash box was a wide empty slab besides. */
+#fanBox::before{content:"FANS ";color:#a8748f}
+#moneyBox{flex:1;min-width:0;background:#fff;border:2px solid #000;border-radius:8px;
+  padding:5px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  color:#146c2e;overflow:hidden;white-space:nowrap;font-size:10px}
+#moneyBox::before{content:"CASH";color:#9aa3b8;font-size:8px;flex:0 0 auto}
+.pill{background:linear-gradient(#fff,#dde4f2);border:2px solid #000;border-radius:12px;
+  font-family:inherit;font-size:9px;color:#12203a;padding:9px 9px;box-shadow:0 2px 0 #0a1130;
+  white-space:nowrap;cursor:pointer;line-height:1.4}
+.pill:active{transform:translateY(2px);box-shadow:none}
+.pill.off{filter:grayscale(.8);opacity:.55}
+#drvPill{flex:1;text-align:center;color:var(--blue);overflow:hidden;text-overflow:ellipsis}
+#clockPill{min-width:44px;text-align:center}
+#botbar.racing #saveBtn,#botbar.racing #menuBtn,#botbar.racing #clockPill{opacity:.35;pointer-events:none}
+
+/* ---------- scene ---------- */
+#sceneWrap{flex:1;position:relative;min-height:0;background:#000}
+canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
+  image-rendering:pixelated;image-rendering:crisp-edges}
+
+/* ---------- race hud ---------- */
+#raceHud{position:absolute;left:0;right:0;bottom:0;display:none;gap:5px;padding:6px;
+  align-items:flex-end;pointer-events:none;z-index:6}
+#raceHud .hb{background:rgba(10,17,48,.92);border:2px solid #000;border-radius:6px;color:#fff;
+  padding:5px 6px;box-shadow:inset 0 0 0 1px #3c50b0}
+#posBadge{font-size:13px;color:var(--gold)}
+#lapBox{font-size:8px;color:#9fe8ff;line-height:1.5;min-width:64px}
+.hb2{display:flex;align-items:center;gap:3px;margin-top:2px}
+.hb2 span{font-size:6px;color:#ffd8a0;width:6px}
+.hb2 i{display:block;height:4px;background:linear-gradient(#8ef08a,var(--green));
+  border:1px solid #000;border-radius:2px;min-width:2px}
+.hb2.f i{background:linear-gradient(#ffe98a,#f5a623)}
+#spdBox{font-size:11px;color:var(--gold);min-width:76px;text-align:right}
+/* Race speed sits in the HUD row rather than the shop's corner button:
+   a race is where the waiting actually is. */
+#raceSpeedBtn{pointer-events:auto;background:linear-gradient(#dfe7f5,#9fb0cc);
+  border:3px solid #000;border-radius:10px;color:#12203a;font-family:inherit;
+  font-size:11px;padding:13px 10px;min-width:48px;box-shadow:0 3px 0 #0a1130;cursor:pointer}
+#raceSpeedBtn.fast{background:linear-gradient(#ffe98a,#f0b02b)}
+#raceSpeedBtn.paused{background:linear-gradient(#ffd6a0,#e88a2b)}
+#raceSpeedBtn:active{transform:translateY(3px);box-shadow:none}
+
+#auraBtn{pointer-events:auto;margin-left:auto;background:linear-gradient(#ffe98a,#ffb52e);
+  border:3px solid #000;border-radius:11px;color:#4a2400;font-family:inherit;font-size:10px;
+  padding:13px 15px;box-shadow:0 3px 0 #6d4300;cursor:pointer}
+#auraBtn:active{transform:translateY(3px);box-shadow:none}
+#auraBtn:disabled{filter:grayscale(1);opacity:.45}
+
+/* ---------- sheets ----------
+   A management game on a phone needs full-screen panels with big rows,
+   not a small centred dialog.  Sheets fill the scene area and leave the
+   tab bar reachable underneath, so you can switch section in one tap. */
+#dim{position:absolute;inset:0;background:rgba(4,8,24,.5);z-index:10;display:none}
+.dlg{position:absolute;inset:0;z-index:11;display:flex;flex-direction:column;
+  background:#eef2f9;border:none;border-radius:0;box-shadow:none;
+  animation:slideup .16s cubic-bezier(.2,.8,.3,1)}
+@keyframes slideup{from{transform:translateY(14px);opacity:.3}}
+@media (prefers-reduced-motion:reduce){.dlg{animation:none}}
+.dlg .ttl{background:linear-gradient(#ff7a6e,var(--red));color:#fff;text-align:center;
+  padding:16px 60px;border-bottom:3px solid #000;font-size:14px;
+  text-shadow:1px 1px 0 #7a0000;position:relative;flex:0 0 auto}
+/* 46px square: comfortably over the 44px minimum touch target, and the
+   flex centring keeps the glyph optically middled however the font renders. */
+.dlg .ttl .x{position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:46px;height:46px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.28);border:2px solid rgba(0,0,0,.5);border-radius:12px;
+  color:#fff;font-family:inherit;font-size:15px;line-height:1;cursor:pointer;
+  padding:0;-webkit-tap-highlight-color:transparent}
+.dlg .ttl .x:active{transform:translateY(-50%) scale(.93);background:rgba(0,0,0,.45)}
+.dlg .bd{padding:10px 10px 14px;overflow-y:auto;line-height:1.7;flex:1;
+  -webkit-overflow-scrolling:touch}
+.dlg .bt{display:flex;gap:7px;padding:8px 8px calc(env(safe-area-inset-bottom) * .35 + 8px);
+  border-top:3px solid #000;background:linear-gradient(#dfe6f4,#c8d2e6);flex-wrap:wrap;flex:0 0 auto}
+.dlg .bt .pill{flex:1;text-align:center;min-width:96px;font-size:12px;padding:15px 10px}
+
+h4{font-size:12px;color:#46506a;margin:14px 0 6px;border-bottom:3px solid #c2cbe0;
+  padding-bottom:5px;letter-spacing:.5px}
+h4:first-child{margin-top:2px}
+.b{color:var(--blue)} .r{color:var(--red)} .g{color:#177a29} .dim{color:#69738c}
+.f1{flex:1;min-width:0}
+.small{font-size:11px;line-height:1.6}
+.row{display:flex;align-items:center;gap:9px;padding:10px 8px;min-height:58px;
+  background:#fff;border:2px solid #cdd6e8;border-radius:11px;margin-bottom:7px}
+.row:active{background:#eaf1ff}
+.row > .pill{padding:13px 12px;font-size:11px;min-width:74px;text-align:center}
+.mg{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mg .pill{text-align:center;padding:18px 6px;font-size:12px}
+.pill.mi{display:flex;align-items:center;gap:9px;justify-content:flex-start;
+  padding-left:12px;position:relative}
+.pill.mi .ico{font-size:19px;line-height:1}
+.pill.mi .dot{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;
+  background:var(--red);border:2px solid #000;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.pill.mi .dot{animation:none}}
+
+/* segmented control inside a sheet */
+.seg{display:flex;gap:6px;margin:2px 0 10px}
+.seg button{flex:1;background:linear-gradient(#fff,#dde4f2);border:2px solid #000;
+  border-radius:10px;font-family:inherit;font-size:11px;padding:12px 4px;color:#12203a;
+  box-shadow:0 2px 0 #0a1130;cursor:pointer}
+.seg button.on{background:linear-gradient(#ffdf7a,#f0a92b);color:#3a2400}
+.seg button:active{transform:translateY(2px);box-shadow:none}
+
+/* part slots on the machine */
+.slots{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.slot{width:60px;height:46px;border:2px dashed #93a0bd;border-radius:9px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:8px;color:#69738c;text-align:center;padding:2px;background:#f4f7fc}
+.slot.on{border-style:solid;border-color:#1a8a2e;background:#e6f7e9;color:#0f5a1f}
+.slot b{font-size:8px;display:block;line-height:1.25}
+
+.chip{display:inline-block;border:2px solid #000;border-radius:7px;padding:2px 6px;
+  font-size:10px;background:#e8eefc;color:#1e3358;vertical-align:middle}
+.chip.gold{background:var(--gold)} .chip.lv{background:#dff0dd;color:#1a5c28}
+.chip.rank{background:#2b3550;color:#ffd23f;min-width:22px;text-align:center}
+.bar{height:11px;background:#d3dae8;border:2px solid #000;border-radius:5px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:linear-gradient(#8ef08a,var(--green))}
+.bar.e i{background:linear-gradient(#ffe98a,#f5a623)}
+.bar.d i{background:linear-gradient(#ff9a92,#e8332a)}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 8px;font-size:11px;margin-top:6px}
+.sg b{color:var(--blue);font-size:13px}
+table.t{width:100%;border-collapse:collapse;font-size:11px;background:#fff;
+  border:2px solid #cdd6e8;border-radius:10px;overflow:hidden}
+table.t td,table.t th{padding:8px 6px;border-bottom:1px solid #e4e9f2;text-align:left}
+table.t th{color:#69738c;font-size:10px;background:#f2f6fd}
+table.t tr.me{background:#fff6ce}
+.face{width:38px;height:46px;image-rendering:pixelated;border:2px solid #000;
+  border-radius:7px;flex:0 0 auto}
+.cicon{width:58px;height:34px;image-rendering:pixelated;border:2px solid #000;
+  border-radius:7px;flex:0 0 auto}
+.bigwin{text-align:center;font-size:15px;color:#177a29;margin:8px 0}
+.bigpos{text-align:center;font-size:15px;color:var(--blue);margin:8px 0}
+.score{text-align:center;font-size:22px;color:#177a29;margin:8px 0}
+/* Toasts drop in from the top like an Android notification.  Centred on the
+   screen they sat right on top of whatever list you were reading; anchored
+   here they clear both the sheet footer and the tab bar. */
+#toast{position:absolute;top:calc(env(safe-area-inset-top) + 52px);left:50%;
+  transform:translateX(-50%);z-index:40;pointer-events:none;
+  background:rgba(10,17,48,.96);color:#fff;border:3px solid #000;border-radius:10px;
+  padding:11px 14px;font-size:11px;display:none;max-width:90%;text-align:center;line-height:1.7;
+  box-shadow:0 4px 0 rgba(0,0,0,.4);animation:toastin .18s cubic-bezier(.2,.9,.3,1)}
+@keyframes toastin{from{transform:translateX(-50%) translateY(-14px);opacity:0}}
+@media (prefers-reduced-motion:reduce){#toast{animation:none}}
+/* with a sheet open the title bar owns that strip, so drop below it */
+#app.sheeting #toast{top:calc(env(safe-area-inset-top) + 118px)}
+
+
+/* ---------- objective card: always says what to do next ---------- */
+#objCard{flex:0 0 auto;z-index:7;display:none;margin:5px 6px 0;
+  background:linear-gradient(#fffdf4,#ffeec2);border:3px solid #000;border-radius:12px;
+  box-shadow:0 3px 0 rgba(0,0,0,.35);padding:8px 9px;align-items:center;gap:9px}
+#objCard.on{display:flex}
+#objText{flex:1;font-size:11px;line-height:1.6;color:#4a3400}
+#objText b{color:#a3160f}
+#objBtn{background:linear-gradient(#5fd36a,#2f9c3c);border:3px solid #000;border-radius:11px;
+  color:#04240a;font-family:inherit;font-size:12px;padding:12px 15px;box-shadow:0 3px 0 #17631f;
+  cursor:pointer;white-space:nowrap}
+#objBtn:active{transform:translateY(3px);box-shadow:none}
+
+/* ---------- tab bar ---------- */
+/* The gesture bar overlaps the bottom of the screen on most phones, so the
+   tabs get its height as padding or they sit underneath it. */
+#tabbar{display:flex;gap:4px;background:var(--navy3);
+  padding:5px 5px calc(env(safe-area-inset-bottom, 0px));
+  border-top:3px solid #000;flex:0 0 auto;z-index:6}
+.tab{flex:1;min-width:0;background:linear-gradient(#59657f,#3c465c);border:2px solid #000;
+  border-bottom:none;border-radius:10px 10px 0 0;color:#e8eefc;font-family:inherit;
+  font-size:9px;padding:9px 1px 8px;display:flex;flex-direction:column;align-items:center;
+  gap:4px;cursor:pointer;position:relative;min-height:56px;justify-content:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab span{font-size:17px;line-height:1}
+.tab:active{transform:translateY(2px)}
+.tab.hot{background:linear-gradient(#ffdf7a,#f0a92b);color:#3a2400;border-color:#000}
+.tab i.dot{position:absolute;top:4px;right:8px;width:9px;height:9px;border-radius:50%;
+  background:var(--red);border:2px solid #000}
+#botbar{padding:6px 5px calc(env(safe-area-inset-bottom) + 6px)}
+#botbar .pill{font-size:11px;padding:11px 12px}
+#clockPill{min-width:86px}
+
+/* bigger, friendlier dialogs on a phone */
+#toast{font-size:11px;padding:11px 14px}
+
+
+/* ---------- speed control ----------
+   A bare ▶ glyph told nobody anything; this states the speed in words. */
+#speedBtn{position:absolute;left:8px;bottom:8px;z-index:6;display:none;
+  align-items:center;gap:7px;background:linear-gradient(#fff,#dbe3f2);
+  border:3px solid #000;border-radius:12px;box-shadow:0 3px 0 #0a1130;
+  font-family:inherit;font-size:10px;color:#12203a;padding:10px 13px;cursor:pointer}
+#speedBtn.on{display:flex}
+#speedBtn .ico{font-size:13px;line-height:1}
+#speedBtn.paused{background:linear-gradient(#ffe08a,#f0b02b)}
+#speedBtn:active{transform:translateY(3px);box-shadow:none}
+
+/* live running order down the side of the race */
+#order{position:absolute;right:8px;top:96px;z-index:6;display:none;
+  flex-direction:column;gap:3px;pointer-events:none}
+#order.on{display:flex}
+#order .o{display:flex;align-items:center;gap:6px;background:rgba(10,17,48,.86);
+  border:2px solid #000;border-radius:7px;padding:4px 7px;font-size:9px;color:#dce6fb;
+  min-width:104px}
+#order .o.me{background:rgba(180,120,0,.94);color:#fff}
+#order .o b{color:var(--gold);min-width:15px}
+#order .o i{width:9px;height:9px;border-radius:2px;border:1px solid #000;font-style:normal}
+#order .o span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Driving mode, coloured by what it costs you: red is pace at the price
+   of tyres and a wall, blue is the other way round. */
+#modeBtn{pointer-events:auto;background:linear-gradient(#dfe7f5,#9fb0cc);
+  border:3px solid #000;border-radius:10px;color:#12203a;font-family:inherit;
+  font-size:12px;padding:8px 8px 6px;min-width:58px;box-shadow:0 3px 0 #0a1130;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
+#modeBtn span{font-size:6px;opacity:.85;letter-spacing:.3px}
+#modeBtn.push{background:linear-gradient(#ffb0a6,#e8574a);color:#3d0b06}
+#modeBtn.conserve{background:linear-gradient(#a9e8f5,#4fa8c8);color:#052733}
+#modeBtn:active{transform:translateY(3px);box-shadow:none}
+
+#pitBtn{pointer-events:auto;background:linear-gradient(#cfe4ff,#7fa8dd);
+  border:3px solid #000;border-radius:11px;color:#0d2340;font-family:inherit;
+  font-size:10px;padding:11px 12px;box-shadow:0 3px 0 #2b4c7a;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1}
+#pitBtn span{font-size:7px;opacity:.8}
+#pitBtn.armed{background:linear-gradient(#ffe08a,#f0a92b)}
+#pitBtn:active{transform:translateY(3px);box-shadow:none}
