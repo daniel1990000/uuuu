@@ -458,6 +458,14 @@ function scrParts() {
   });
   dlg("Parts", h, [["Close", () => closeAllDlg()]]);
 }
+/* Fit a part to the machine currently entered.  The button in the parts
+   list has always called this; it was never written, so the whole game
+   threw "pickInstall is not defined" the moment anyone tapped Fit. */
+function pickInstall(id) {
+  const car = G.cars[G.teams[G.curTeam].car];
+  if (!car) return toast("No machine to fit it to.");
+  auraPicker(a => { installPart(car, id, a); updateChrome(); closeAllDlg(); scrParts(); }, "part fitting");
+}
 /* Part effects in words, so the list reads without a legend. */
 const FX_NAME = { spd: "Speed", acc: "Accel", hdl: "Handling", dur: "Durability",
   short: "Short track", mid: "Intermediate", ss: "Superspeedway", road: "Road course",
