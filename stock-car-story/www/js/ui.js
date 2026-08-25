@@ -75,10 +75,17 @@ function updateChrome() {
   $("moneyBox").textContent = fmtK(G.money);
   $("rpBox").textContent = "RP " + Math.floor(G.rp);
   $("fanBox").textContent = G.fans >= 10000 ? ((G.fans / 1000).toFixed(0) + "k") : G.fans >= 1000 ? ((G.fans / 1000).toFixed(1) + "k") : G.fans;
+  const paused = !!G.set.paused, spd = G.set.speed || 1;
   const sp = $("speedBtn");
-  sp.classList.toggle("paused", !!G.set.paused);
-  sp.querySelector(".ico").textContent = G.set.paused ? "❚❚" : G.set.speed === 2 ? "▶▶" : "▶";
-  sp.querySelector(".lbl").textContent = G.set.paused ? "PAUSED" : G.set.speed === 2 ? "2× SPEED" : "1× SPEED";
+  sp.classList.toggle("paused", paused);
+  sp.querySelector(".ico").textContent = paused ? "❚❚" : spd === 3 ? "▶▶▶" : spd === 2 ? "▶▶" : "▶";
+  sp.querySelector(".lbl").textContent = paused ? "PAUSED" : spd + "× SPEED";
+  const rs = $("raceSpeedBtn");
+  if (rs) {
+    rs.textContent = paused ? "❚❚" : spd + "×";
+    rs.classList.toggle("fast", !paused && spd > 1);
+    rs.classList.toggle("paused", paused);
+  }
 }
 
 /* ---------- little widgets ---------- */
@@ -125,11 +132,13 @@ function scrHelp() {
     "Win a championship to earn a bigger garage, then move up the ladder.</div>" +
     "<h4>Getting around</h4><div class='small'>The <b class='b'>card at the top</b> always says what to do next — " +
     "tap its button. The <b class='b'>tabs</b> along the bottom are your five screens. " +
-    "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap to speed up or pause. " +
+    "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap it to go 1×, 2×, 3× or pause. " +
     "You can also tap the car, the crew, the banner or the bench in the shop.</div>" +
     "<h4>Race day</h4><div class='small'>Pick <b>tyres</b> (grip against wear) and <b>fuel</b> " +
     "(weight against range) before the flag. During the race the <b class='b'>PIT</b> button calls your stop — " +
     "tyres, fuel or both. A partial stop is quicker, and stopping under caution costs about half the time. " +
+    "The <b class='b'>1×</b> button next to it runs the race faster — the simulation still resolves every " +
+    "overtake and every bump exactly as it does at normal speed, so nothing is skipped. " +
     "If you never call one, the crew will bring you in before the tyres are gone.</div>" +
     "<h4>Auras</h4><div class='small'>One-shot boosts earned from first podiums, titles and driver levels. " +
     "Spend them on a race, a build, a part fitting, an upgrade or a training session — " +

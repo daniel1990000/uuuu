@@ -78,6 +78,15 @@ canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
   border:1px solid #000;border-radius:2px;min-width:2px}
 .hb2.f i{background:linear-gradient(#ffe98a,#f5a623)}
 #spdBox{font-size:11px;color:var(--gold);min-width:76px;text-align:right}
+/* Race speed sits in the HUD row rather than the shop's corner button:
+   a race is where the waiting actually is. */
+#raceSpeedBtn{pointer-events:auto;background:linear-gradient(#dfe7f5,#9fb0cc);
+  border:3px solid #000;border-radius:10px;color:#12203a;font-family:inherit;
+  font-size:11px;padding:13px 10px;min-width:48px;box-shadow:0 3px 0 #0a1130;cursor:pointer}
+#raceSpeedBtn.fast{background:linear-gradient(#ffe98a,#f0b02b)}
+#raceSpeedBtn.paused{background:linear-gradient(#ffd6a0,#e88a2b)}
+#raceSpeedBtn:active{transform:translateY(3px);box-shadow:none}
+
 #auraBtn{pointer-events:auto;margin-left:auto;background:linear-gradient(#ffe98a,#ffb52e);
   border:3px solid #000;border-radius:11px;color:#4a2400;font-family:inherit;font-size:10px;
   padding:13px 15px;box-shadow:0 3px 0 #6d4300;cursor:pointer}
@@ -275,6 +284,7 @@ table.t tr.me{background:#fff6ce}
       <div class="hb" id="posBadge">P1</div>
       <div class="hb" id="lapBox">LAP 1/30</div>
       <div class="hb" id="spdBox">0 mph</div>
+      <button id="raceSpeedBtn">1&times;</button>
       <button id="pitBtn">PIT<span>in</span></button>
       <button id="auraBtn">AURA</button>
     </div>
@@ -4875,10 +4885,17 @@ function updateChrome() {
   $("moneyBox").textContent = fmtK(G.money);
   $("rpBox").textContent = "RP " + Math.floor(G.rp);
   $("fanBox").textContent = G.fans >= 10000 ? ((G.fans / 1000).toFixed(0) + "k") : G.fans >= 1000 ? ((G.fans / 1000).toFixed(1) + "k") : G.fans;
+  const paused = !!G.set.paused, spd = G.set.speed || 1;
   const sp = $("speedBtn");
-  sp.classList.toggle("paused", !!G.set.paused);
-  sp.querySelector(".ico").textContent = G.set.paused ? "❚❚" : G.set.speed === 2 ? "▶▶" : "▶";
-  sp.querySelector(".lbl").textContent = G.set.paused ? "PAUSED" : G.set.speed === 2 ? "2× SPEED" : "1× SPEED";
+  sp.classList.toggle("paused", paused);
+  sp.querySelector(".ico").textContent = paused ? "❚❚" : spd === 3 ? "▶▶▶" : spd === 2 ? "▶▶" : "▶";
+  sp.querySelector(".lbl").textContent = paused ? "PAUSED" : spd + "× SPEED";
+  const rs = $("raceSpeedBtn");
+  if (rs) {
+    rs.textContent = paused ? "❚❚" : spd + "×";
+    rs.classList.toggle("fast", !paused && spd > 1);
+    rs.classList.toggle("paused", paused);
+  }
 }
 
 /* ---------- little widgets ---------- */
@@ -4925,11 +4942,13 @@ function scrHelp() {
     "Win a championship to earn a bigger garage, then move up the ladder.</div>" +
     "<h4>Getting around</h4><div class='small'>The <b class='b'>card at the top</b> always says what to do next — " +
     "tap its button. The <b class='b'>tabs</b> along the bottom are your five screens. " +
-    "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap to speed up or pause. " +
+    "<b class='b'>▶ SPEED</b> at the bottom-left runs the calendar; tap it to go 1×, 2×, 3× or pause. " +
     "You can also tap the car, the crew, the banner or the bench in the shop.</div>" +
     "<h4>Race day</h4><div class='small'>Pick <b>tyres</b> (grip against wear) and <b>fuel</b> " +
     "(weight against range) before the flag. During the race the <b class='b'>PIT</b> button calls your stop — " +
     "tyres, fuel or both. A partial stop is quicker, and stopping under caution costs about half the time. " +
+    "The <b class='b'>1×</b> button next to it runs the race faster — the simulation still resolves every " +
+    "overtake and every bump exactly as it does at normal speed, so nothing is skipped. " +
     "If you never call one, the crew will bring you in before the tyres are gone.</div>" +
     "<h4>Auras</h4><div class='small'>One-shot boosts earned from first podiums, titles and driver levels. " +
     "Spend them on a race, a build, a part fitting, an upgrade or a training session — " +
@@ -5700,6 +5719,10 @@ function scrDevelop() {
 
 let MODE = "title";        // title | shop | race
 let weekAcc = 0, lastT = 0;
+/* How fast the calendar runs at each setting.  Not linear on purpose —
+   3x is for skipping a quiet stretch between races, so it is allowed to
+   run a little hotter than three times one. */
+const SPEED_MUL = { 1: 1, 2: 2.2, 3: 3.6 };
 
 function enterRaceMode() {
   MODE = "race";
@@ -5752,7 +5775,14 @@ function loop(ts) {
 
   if (MODE === "race") {
     try {
-      if (R && !dlgStack.length) raceTick(dt);
+      /* Run the simulation N times at the normal step instead of once at
+         N times the step.  Feeding raceTick a triple-length dt would let
+         cars pass through each other between frames; stepping keeps every
+         overtake and every contact resolved exactly as it is at 1x. */
+      if (R && !dlgStack.length && !G.set.paused) {
+        const steps = clamp(G.set.speed | 0, 1, 3);
+        for (let i = 0; i < steps && R; i++) raceTick(dt);
+      }
       if (R) { drawRace(); updateRaceHud(); }
       else drawGarage();
     } catch (e) { fatal("race", e); }
@@ -5760,7 +5790,7 @@ function loop(ts) {
   }
   /* shop: time flows unless a dialog is open or the player paused */
   if (!dlgStack.length && !G.set.paused) {
-    weekAcc += dt * (G.set.speed === 2 ? 2.2 : 1);
+    weekAcc += dt * (SPEED_MUL[G.set.speed] || 1);
     if (weekAcc >= 1.5) {
       weekAcc = 0;
       advanceWeek();
@@ -5874,13 +5904,17 @@ function boot() {
   const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
   tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
   tab("tabShop", scrDevelop); tab("tabMore", openMenu);
-  $("speedBtn").onclick = () => {
+  /* 1x -> 2x -> 3x -> paused, shared by the shop button and the race one
+     so the game only has one idea of how fast time is running. */
+  const cycleSpeed = () => {
     if (!G) return; sfx("click");
     if (G.set.paused) { G.set.paused = false; G.set.speed = 1; }
-    else if (G.set.speed === 1) G.set.speed = 2;
+    else if (G.set.speed < 3) G.set.speed++;
     else { G.set.speed = 1; G.set.paused = true; }
     updateChrome();
   };
+  $("speedBtn").onclick = cycleSpeed;
+  $("raceSpeedBtn").onclick = cycleSpeed;
   $("auraBtn").onclick = fireAura;
   $("pitBtn").onclick = () => {
     if (!R || R.phase !== "green") return;

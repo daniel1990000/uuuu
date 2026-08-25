@@ -5,6 +5,10 @@
 
 let MODE = "title";        // title | shop | race
 let weekAcc = 0, lastT = 0;
+/* How fast the calendar runs at each setting.  Not linear on purpose —
+   3x is for skipping a quiet stretch between races, so it is allowed to
+   run a little hotter than three times one. */
+const SPEED_MUL = { 1: 1, 2: 2.2, 3: 3.6 };
 
 function enterRaceMode() {
   MODE = "race";
@@ -57,7 +61,14 @@ function loop(ts) {
 
   if (MODE === "race") {
     try {
-      if (R && !dlgStack.length) raceTick(dt);
+      /* Run the simulation N times at the normal step instead of once at
+         N times the step.  Feeding raceTick a triple-length dt would let
+         cars pass through each other between frames; stepping keeps every
+         overtake and every contact resolved exactly as it is at 1x. */
+      if (R && !dlgStack.length && !G.set.paused) {
+        const steps = clamp(G.set.speed | 0, 1, 3);
+        for (let i = 0; i < steps && R; i++) raceTick(dt);
+      }
       if (R) { drawRace(); updateRaceHud(); }
       else drawGarage();
     } catch (e) { fatal("race", e); }
@@ -65,7 +76,7 @@ function loop(ts) {
   }
   /* shop: time flows unless a dialog is open or the player paused */
   if (!dlgStack.length && !G.set.paused) {
-    weekAcc += dt * (G.set.speed === 2 ? 2.2 : 1);
+    weekAcc += dt * (SPEED_MUL[G.set.speed] || 1);
     if (weekAcc >= 1.5) {
       weekAcc = 0;
       advanceWeek();
@@ -179,13 +190,17 @@ function boot() {
   const tab = (id, fn) => { $(id).onclick = () => { if (MODE !== "shop") return; sfx("click"); fn(); }; };
   tab("tabTeam", scrTeam); tab("tabCars", scrCars); tab("tabRace", scrRaces);
   tab("tabShop", scrDevelop); tab("tabMore", openMenu);
-  $("speedBtn").onclick = () => {
+  /* 1x -> 2x -> 3x -> paused, shared by the shop button and the race one
+     so the game only has one idea of how fast time is running. */
+  const cycleSpeed = () => {
     if (!G) return; sfx("click");
     if (G.set.paused) { G.set.paused = false; G.set.speed = 1; }
-    else if (G.set.speed === 1) G.set.speed = 2;
+    else if (G.set.speed < 3) G.set.speed++;
     else { G.set.speed = 1; G.set.paused = true; }
     updateChrome();
   };
+  $("speedBtn").onclick = cycleSpeed;
+  $("raceSpeedBtn").onclick = cycleSpeed;
   $("auraBtn").onclick = fireAura;
   $("pitBtn").onclick = () => {
     if (!R || R.phase !== "green") return;

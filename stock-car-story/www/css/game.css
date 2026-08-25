@@ -60,6 +60,15 @@ canvas#scene{position:absolute;inset:0;width:100%;height:100%;display:block;
   border:1px solid #000;border-radius:2px;min-width:2px}
 .hb2.f i{background:linear-gradient(#ffe98a,#f5a623)}
 #spdBox{font-size:11px;color:var(--gold);min-width:76px;text-align:right}
+/* Race speed sits in the HUD row rather than the shop's corner button:
+   a race is where the waiting actually is. */
+#raceSpeedBtn{pointer-events:auto;background:linear-gradient(#dfe7f5,#9fb0cc);
+  border:3px solid #000;border-radius:10px;color:#12203a;font-family:inherit;
+  font-size:11px;padding:13px 10px;min-width:48px;box-shadow:0 3px 0 #0a1130;cursor:pointer}
+#raceSpeedBtn.fast{background:linear-gradient(#ffe98a,#f0b02b)}
+#raceSpeedBtn.paused{background:linear-gradient(#ffd6a0,#e88a2b)}
+#raceSpeedBtn:active{transform:translateY(3px);box-shadow:none}
+
 #auraBtn{pointer-events:auto;margin-left:auto;background:linear-gradient(#ffe98a,#ffb52e);
   border:3px solid #000;border-radius:11px;color:#4a2400;font-family:inherit;font-size:10px;
   padding:13px 15px;box-shadow:0 3px 0 #6d4300;cursor:pointer}
