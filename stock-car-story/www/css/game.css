@@ -8,7 +8,13 @@ html,body{height:100%;overflow:hidden;background:#000;position:fixed;width:100%}
 body{font-family:'Press Start 2P','Courier New',monospace;font-size:13px;color:var(--ink);
   touch-action:manipulation;-webkit-user-select:none;user-select:none;overscroll-behavior:none;
   -webkit-text-size-adjust:100%}
-#app{height:100dvh;height:100vh;max-width:600px;margin:0 auto;display:flex;flex-direction:column;
+/* Order matters and it was backwards: the later declaration wins, so
+   putting 100dvh first and 100vh second meant 100vh always won.  On
+   mobile Chrome 100vh is measured as if the address bar were hidden, so
+   the app was taller than the visible viewport and the tab bar sat below
+   the fold.  Fallback first, modern value last. */
+#app{height:100vh;height:100dvh;height:var(--appH, 100dvh);
+  max-width:600px;margin:0 auto;display:flex;flex-direction:column;
   background:#79c34d;position:relative;overflow:hidden}
 
 /* ---------- chrome bars ---------- */
@@ -172,7 +178,10 @@ table.t tr.me{background:#fff6ce}
 #objBtn:active{transform:translateY(3px);box-shadow:none}
 
 /* ---------- tab bar ---------- */
-#tabbar{display:flex;gap:4px;padding:5px 5px 0;background:var(--navy3);
+/* The gesture bar overlaps the bottom of the screen on most phones, so the
+   tabs get its height as padding or they sit underneath it. */
+#tabbar{display:flex;gap:4px;background:var(--navy3);
+  padding:5px 5px calc(env(safe-area-inset-bottom, 0px));
   border-top:3px solid #000;flex:0 0 auto;z-index:6}
 .tab{flex:1;min-width:0;background:linear-gradient(#59657f,#3c465c);border:2px solid #000;
   border-bottom:none;border-radius:10px 10px 0 0;color:#e8eefc;font-family:inherit;

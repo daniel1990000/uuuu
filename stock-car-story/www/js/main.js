@@ -149,7 +149,26 @@ function startShop() {
   }
 }
 
+/* Pin the app to the viewport we can actually see.
+
+   dvh is the right unit but it is not everywhere yet, and on a phone the
+   difference is not cosmetic: vh is measured as though the address bar
+   were hidden, so a vh-sized layout runs off the bottom of the screen and
+   takes the tab bar with it.  Measuring the viewport directly is the one
+   thing every browser agrees on, so that value wins over both units.
+
+   visualViewport fires while the address bar slides, which the plain
+   resize event does not. */
+function syncAppHeight() {
+  const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  if (h > 200) document.documentElement.style.setProperty("--appH", Math.round(h) + "px");
+}
+
 function boot() {
+  syncAppHeight();
+  window.addEventListener("resize", syncAppHeight);
+  window.addEventListener("orientationchange", () => setTimeout(syncAppHeight, 250));
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", syncAppHeight);
   initRender();
   /* Textures and the pixel-art button frames are both cosmetic.  If a
      browser cannot bake them the game should still be playable, so
